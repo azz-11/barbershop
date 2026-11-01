@@ -1,0 +1,7 @@
+# ملفات خط ثمانية لا تُرفع (شروط الترخيص)
+fonts/*.woff2
+fonts/*.woff
+fonts/*.otf
+fonts/*.ttf
+dist/
+node_modules/
