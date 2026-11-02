@@ -19,12 +19,28 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
-    star: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.3 5.5 22l1.7-7.4L1.5 9.6 9 8.9z"/></svg>'
+    star: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.3 5.5 22l1.7-7.4L1.5 9.6 9 8.9z"/></svg>',
+    grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
+    /* أيقونات الأقسام */
+    hair: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg>',
+    beard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4v6a7 7 0 0 0 14 0V4"/><path d="M9 13c1 .8 2 1 3 1s2-.2 3-1"/><path d="M12 17v4"/></svg>',
+    skin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/><path d="M9.5 14.5a2.5 2.5 0 0 0 2.5 2.5"/></svg>',
+    nails: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="9" width="8" height="12" rx="2"/><path d="M10 9V6a2 2 0 0 1 4 0v3"/><path d="M8 13h8"/></svg>',
+    makeup: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3l7 7-9 9H5v-7z"/><path d="M5 19l-2 2"/><path d="M10 8l6 6"/></svg>',
+    kids: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M9 15c.8.7 1.9 1 3 1s2.2-.3 3-1"/></svg>'
   };
+  const CATS = DATA.categories;
 
   /* ---------- الحالة ---------- */
   const state = {
-    view: "home",       // home | book | done | mine
+    view: "home",       // splash | home | cats | cat | book | done | mine | profile
+    catId: null,
+    editProfile: false,
+    clearAsk: false,
     filter: "all",      // all | men | women
     salonId: null,
     step: 0,
@@ -47,6 +63,27 @@
     memBookings = list;
     try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch (e) { /* يعمل بالذاكرة فقط */ }
   }
+  const mem = {};
+  function getItem(k, fallback) {
+    try { const v = localStorage.getItem(k); return v === null ? (k in mem ? mem[k] : fallback) : JSON.parse(v); } catch (e) { return k in mem ? mem[k] : fallback; }
+  }
+  function setItem(k, v) { mem[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ذاكرة فقط */ } }
+
+  const PROFILE_KEY = "enayati.profile.v1";
+  const THEME_KEY = "enayati.theme";
+  const WELCOME_KEY = "enayati.welcomed";
+  const loadProfile = () => getItem(PROFILE_KEY, { name: "", phone: "", email: "", pref: "all", since: new Date().toISOString() });
+  function saveProfile(p) { setItem(PROFILE_KEY, p); }
+
+  /* ---------- الوضع الليلي والنهاري ---------- */
+  function applyTheme(t) {
+    const root = document.documentElement;
+    if (t === "light" || t === "dark") root.setAttribute("data-theme", t); else root.removeAttribute("data-theme");
+  }
+  const currentTheme = () => getItem(THEME_KEY, "system");
+  const isDark = () => { const t = currentTheme(); return t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches); };
+  function setTheme(t) { setItem(THEME_KEY, t); applyTheme(t); }
+  applyTheme(currentTheme());
 
   /* ---------- أدوات ---------- */
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,19 +169,54 @@
         </span>
         <span class="tag">${s.type === "men" ? "رجالي" : "نسائي"}</span>
       </button>`).join("");
+    const p = loadProfile();
+    const h = new Date().getHours();
+    const greet = h < 12 ? "صباح الخير" : "مساء الخير";
+    const next = upcomingBookings()[0];
+    const nextCard = next ? (() => {
+      const s = DATA.salons.find((x) => x.id === next.salonId);
+      return `<button type="button" class="next-visit" data-act="mine">
+        <span class="next-label">موعدك القادم</span>
+        <span class="next-main">${esc(s.name)} · ${next.serviceNames.map(esc).join("، ")}</span>
+        <span class="next-when">${fmtDate(next.date)} · <span class="num">${fmtTime(next.time)}</span></span>
+      </button>`;
+    })() : "";
     return `
       <section class="screen">
         ${topbar()}
-        <div class="hello"><h1>موعدك القادم بضغطة</h1><p>اختر الصالون، ثم الخدمة والمختص والوقت، وادفع.</p></div>
-        <div class="segments" role="group" aria-label="نوع الصالون">${seg}</div>
-        <div class="salons">${cards}</div>
+        <div class="hello"><p class="greet">${greet}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}</p><h1>أناقتك على موعد</h1></div>
+        ${nextCard}
+        <div class="block">
+          <div class="block-head"><h2 class="section-title">الأقسام</h2><button type="button" class="link" data-act="cats">عرض الكل</button></div>
+          <div class="cat-row">${CATS.map((c) => `
+            <button type="button" class="cat-chip" data-act="cat" data-v="${c.id}">
+              <span class="cat-ic" aria-hidden="true">${I[c.id]}</span><span>${esc(c.name)}</span>
+            </button>`).join("")}</div>
+        </div>
+        <div class="block">
+          <h2 class="section-title">الصوالين</h2>
+          <div class="segments" role="group" aria-label="نوع الصالون">${seg}</div>
+          <div class="salons">${cards}</div>
+        </div>
       </section>${tabbar("home")}`;
   }
 
-  function topbar(back) {
+  function themeBtn() {
+    const dark = isDark();
+    return `<button type="button" class="icon-btn" data-act="toggle-theme" aria-label="${dark ? "الوضع النهاري" : "الوضع الليلي"}" title="${dark ? "الوضع النهاري" : "الوضع الليلي"}">${dark ? I.sun : I.moon}</button>`;
+  }
+
+  function topbar(back, title) {
+    if (back) {
+      return `<header class="topbar">
+        <button type="button" class="icon-btn" data-act="back" aria-label="رجوع">${I.back}</button>
+        <div class="logo">${esc(title || "عناياتي")}</div>
+        ${themeBtn()}
+      </header>`;
+    }
     return `<header class="topbar">
-      ${back ? `<button type="button" class="icon-btn" data-act="back" aria-label="رجوع">${I.back}</button>` : `<div class="logo"><span class="logo-mark">${I.scissors.replace("<svg", '<svg width="20" height="20"')}</span>عناياتي</div>`}
-      ${back ? `<div class="logo">عناياتي</div><span style="width:44px"></span>` : ""}
+      <div class="logo"><span class="logo-mark">${I.scissors.replace("<svg", '<svg width="20" height="20"')}</span>عناياتي</div>
+      ${themeBtn()}
     </header>`;
   }
 
@@ -315,22 +387,190 @@
   }
 
   function tabbar(active) {
-    const upcoming = loadBookings().filter((b) => bookingStatus(b)[0] === "upcoming").length;
+    const upcoming = upcomingBookings().length;
+    const tab = (act, icon, label, extra) =>
+      `<button type="button" class="tab" data-act="${act}" ${active === act ? 'aria-current="page"' : ""}>${icon}${label}${extra || ""}</button>`;
     return `<nav class="tabbar" aria-label="التنقل"><div class="tabbar-inner">
-      <button type="button" class="tab" data-act="home" ${active === "home" ? 'aria-current="page"' : ""}>${I.home}الرئيسية</button>
-      <button type="button" class="tab" data-act="mine" ${active === "mine" ? 'aria-current="page"' : ""}>${I.cal}مواعيدي${upcoming ? `<span class="badge num">${upcoming}</span>` : ""}</button>
+      ${tab("home", I.home, "الرئيسية")}
+      ${tab("cats", I.grid, "الأقسام")}
+      ${tab("mine", I.cal, "مواعيدي", upcoming ? `<span class="badge num">${upcoming}</span>` : "")}
+      ${tab("profile", I.user, "حسابي")}
     </div></nav>`;
+  }
+
+  const upcomingBookings = () => loadBookings().filter((b) => bookingStatus(b)[0] === "upcoming")
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
+  /* ---------- الأقسام ---------- */
+  function servicesInCat(catId) {
+    const out = [];
+    DATA.salons.forEach((s) => s.services.forEach((sv) => { if (sv.cat === catId) out.push({ s, sv }); }));
+    return out;
+  }
+
+  function viewCats() {
+    return `<section class="screen">
+        ${topbar()}
+        <div class="hello"><h1>الأقسام</h1><p>اختر ما تحتاجه، ونعرض لك الصوالين التي تقدمه.</p></div>
+        <div class="cat-grid">${CATS.map((c) => {
+          const n = servicesInCat(c.id).length;
+          return `<button type="button" class="cat-card" data-act="cat" data-v="${c.id}">
+            <span class="cat-ic" aria-hidden="true">${I[c.id]}</span>
+            <span class="cat-name">${esc(c.name)}</span>
+            <span class="cat-desc">${esc(c.desc)}</span>
+            <span class="cat-count num">${n === 1 ? "خدمة واحدة" : n === 2 ? "خدمتان" : n <= 10 ? `${n} خدمات` : `${n} خدمة`}</span>
+          </button>`;
+        }).join("")}</div>
+      </section>${tabbar("cats")}`;
+  }
+
+  function viewCat() {
+    const c = CATS.find((x) => x.id === state.catId);
+    const items = servicesInCat(c.id).sort((a, b) => a.sv.price - b.sv.price);
+    return `<section class="screen">
+        ${topbar(true, c.name)}
+        <div class="cat-hero"><span class="cat-ic" aria-hidden="true">${I[c.id]}</span><div><h1>${esc(c.name)}</h1><p>${esc(c.desc)}</p></div></div>
+        <p class="hint">مرتبة من الأقل سعراً. اضغط على الخدمة لتبدأ الحجز مباشرة.</p>
+        <div class="options">${items.map(({ s, sv }) => `
+          <button type="button" class="svc-row" data-act="catsvc" data-v="${s.id}|${sv.id}" style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}">
+            <span class="monogram sm" aria-hidden="true">${esc(initials(s.name))}</span>
+            <span class="svc-info"><span class="title">${esc(sv.name)}</span><span class="sub">${esc(s.name)} · <span class="num">${fmtDuration(sv.min)}</span></span></span>
+            <span class="price num">${money(sv.price)}</span>
+          </button>`).join("")}</div>
+      </section>${tabbar("cats")}`;
+  }
+
+  /* ---------- حسابي ---------- */
+  function profileStats() {
+    const all = loadBookings();
+    const visits = all.filter((b) => bookingStatus(b)[0] === "past");
+    const spent = visits.reduce((a, b) => a + b.total, 0);
+    const count = (arr, key) => arr.reduce((m, x) => { m[key(x)] = (m[key(x)] || 0) + 1; return m; }, {});
+    const top = (m) => Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+    const favSalon = top(count(visits.length ? visits : all.filter((b) => b.status !== "cancelled"), (b) => b.salonId));
+    const favSvc = top(count((visits.length ? visits : all.filter((b) => b.status !== "cancelled")).flatMap((b) => b.serviceNames), (x) => x));
+    return {
+      visits: visits.length, upcoming: upcomingBookings().length,
+      cancelled: all.filter((b) => b.status === "cancelled").length,
+      spent, points: Math.floor(spent / 10),
+      favSalon: favSalon ? DATA.salons.find((s) => s.id === favSalon[0]) : null,
+      favSvc: favSvc ? favSvc[0] : null,
+      last: visits.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0] || null
+    };
+  }
+
+  const REWARD_EVERY = 5;
+
+  function viewProfile() {
+    const p = loadProfile();
+    const st = profileStats();
+    const toReward = REWARD_EVERY - (st.visits % REWARD_EVERY);
+    const progress = ((st.visits % REWARD_EVERY) / REWARD_EVERY) * 100;
+    const theme = currentTheme();
+    const since = new Date(p.since).toLocaleDateString(LOCALE, { month: "long", year: "numeric" });
+    const prefLabel = { all: "الكل", men: "رجالي", women: "نسائي" }[p.pref || "all"];
+
+    const info = state.editProfile ? `
+      <form class="card form" id="profile-form" novalidate>
+        <label for="pf-name">الاسم</label>
+        <input id="pf-name" name="name" type="text" autocomplete="name" value="${esc(p.name)}" placeholder="مثال: عبدالعزيز">
+        <label for="pf-phone">رقم الجوال</label>
+        <input id="pf-phone" name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(p.phone)}" placeholder="05XXXXXXXX">
+        <p class="field-error" id="pf-phone-err" hidden>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
+        <label for="pf-email">البريد الإلكتروني (اختياري)</label>
+        <input id="pf-email" name="email" type="email" dir="ltr" autocomplete="email" value="${esc(p.email)}" placeholder="name@example.com">
+        <label for="pf-pref">الصوالين المفضلة</label>
+        <select id="pf-pref" name="pref">
+          ${[["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]].map(([v, l]) => `<option value="${v}" ${p.pref === v ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <div class="booking-actions"><button type="submit" class="btn">حفظ البيانات</button><button type="button" class="btn ghost" data-act="edit-cancel">إلغاء</button></div>
+      </form>` : `
+      <div class="card">
+        <div class="row"><span>الاسم</span><span>${p.name ? esc(p.name) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
+        <div class="row"><span>الجوال</span><span class="num" dir="ltr">${p.phone ? esc(p.phone) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
+        <div class="row"><span>البريد</span><span dir="ltr">${p.email ? esc(p.email) : '<span class="hint">—</span>'}</span></div>
+        <div class="row"><span>الصوالين المفضلة</span><span>${prefLabel}</span></div>
+        <div class="row"><span>عضو منذ</span><span>${since}</span></div>
+      </div>
+      <button type="button" class="btn ghost wide" data-act="edit-profile">تعديل البيانات</button>`;
+
+    return `<section class="screen">
+        ${topbar()}
+        <div class="profile-head">
+          <span class="avatar lg" aria-hidden="true">${p.name ? esc(p.name.charAt(0)) : I.user}</span>
+          <div><h1>${p.name ? esc(p.name) : "حسابي"}</h1><p class="hint">${p.name ? `نقاط الولاء: <b class="num">${st.points}</b>` : "أضف اسمك ورقمك ليسهل على الصالون التواصل معك."}</p></div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><b class="num">${st.visits}</b><span>الزيارات</span></div>
+          <div class="stat"><b class="num">${st.upcoming}</b><span>القادمة</span></div>
+          <div class="stat"><b class="num">${st.spent.toLocaleString("en-US")}</b><span>${CUR} إنفاق</span></div>
+          <div class="stat"><b class="num">${st.points}</b><span>النقاط</span></div>
+        </div>
+
+        <div class="card reward">
+          <div class="block-head"><b>برنامج الولاء</b><span class="hint num">${st.visits % REWARD_EVERY} / ${REWARD_EVERY}</span></div>
+          <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${REWARD_EVERY}" aria-valuenow="${st.visits % REWARD_EVERY}"><span style="width:${progress}%"></span></div>
+          <p class="hint">${toReward === REWARD_EVERY && st.visits ? "مبروك! زيارتك القادمة عليها خصم ٢٠٪." : `باقي ${toReward === 1 ? "زيارة واحدة" : toReward === 2 ? "زيارتان" : `<b class="num">${toReward}</b> زيارات`} وتحصل على خصم ٢٠٪.`}</p>
+        </div>
+
+        <div class="card">
+          <div class="row"><span>الصالون المفضل</span><span>${st.favSalon ? esc(st.favSalon.name) : "—"}</span></div>
+          <div class="row"><span>الخدمة الأكثر طلباً</span><span>${st.favSvc ? esc(st.favSvc) : "—"}</span></div>
+          <div class="row"><span>آخر زيارة</span><span>${st.last ? fmtDate(st.last.date, { day: "numeric", month: "long" }) : "—"}</span></div>
+          <div class="row"><span>مواعيد ملغاة</span><span class="num">${st.cancelled}</span></div>
+        </div>
+
+        <div class="block"><h2 class="section-title">بياناتي</h2>${info}</div>
+
+        <div class="block">
+          <h2 class="section-title">المظهر</h2>
+          <div class="segments" role="radiogroup" aria-label="المظهر">
+            ${[["light", "نهاري", I.sun], ["dark", "ليلي", I.moon], ["system", "تلقائي", ""]].map(([v, l, ic]) =>
+              `<button type="button" role="radio" data-act="theme" data-v="${v}" aria-pressed="${theme === v}" aria-checked="${theme === v}">${ic ? ic.replace("<svg", '<svg width="16" height="16" class="seg-ic"') : ""}${l}</button>`).join("")}
+          </div>
+          <p class="hint">"تلقائي" يتبع إعداد جوالك.</p>
+        </div>
+
+        <div class="block">
+          ${state.clearAsk
+            ? `<div class="confirm-box"><p>سيُحذف سجل مواعيدك وبياناتك من هذا الجهاز. هل أنت متأكد؟</p><div class="booking-actions">
+                <button type="button" class="btn danger" data-act="clear-yes">نعم، احذف</button><button type="button" class="btn ghost" data-act="clear-no">تراجع</button></div></div>`
+            : `<button type="button" class="btn danger wide" data-act="clear-ask">حذف بياناتي من الجهاز</button>`}
+        </div>
+      </section>${tabbar("profile")}`;
+  }
+
+  /* ---------- الواجهة الترحيبية ---------- */
+  function viewSplash() {
+    const first = !getItem(WELCOME_KEY, false);
+    return `<section class="splash ${first ? "first" : ""}" aria-label="مرحباً بك في عناياتي">
+      <div class="splash-mark" aria-hidden="true">${I.scissors}</div>
+      <h1 class="splash-name">عناياتي</h1>
+      <p class="splash-line">أناقتك على موعد</p>
+      ${first
+        ? `<p class="splash-sub">احجز صالونك المفضل، رجالي أو نسائي، في أقل من دقيقة.</p>
+           <button type="button" class="btn splash-btn" data-act="enter">ابدأ الآن</button>`
+        : `<button type="button" class="splash-skip" data-act="enter">دخول</button>`}
+    </section>`;
   }
 
   /* ---------- العرض ---------- */
   function render() {
     applyBrand(state.view === "book" || state.view === "done" ? salon() : null);
-    $app.innerHTML = { home: viewHome, book: viewBook, done: viewDone, mine: viewMine }[state.view]();
+    $app.innerHTML = { splash: viewSplash, home: viewHome, cats: viewCats, cat: viewCat, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile }[state.view]();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && state.view === "splash") meta.setAttribute("content", "#0E4F4A");
   }
-  function go(view) { state.view = view; state.cancelAsk = null; render(); window.scrollTo(0, 0); }
+  function go(view) {
+    if (view !== state.view) state.prev = state.view;
+    state.view = view; state.cancelAsk = null; state.editProfile = false; state.clearAsk = false;
+    render(); window.scrollTo(0, 0);
+  }
 
-  function startBooking(id) {
-    Object.assign(state, { salonId: id, step: 0, services: [], staffId: null, date: null, time: null, payment: null });
+  function startBooking(id, serviceId) {
+    state.bookFrom = state.view;
+    Object.assign(state, { salonId: id, step: serviceId ? 1 : 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null });
     go("book");
   }
 
@@ -378,8 +618,24 @@
       case "rebook": startBooking(v); break;
       case "home": go("home"); break;
       case "mine": go("mine"); break;
+      case "cats": go("cats"); break;
+      case "profile": go("profile"); break;
+      case "cat": state.catId = v; go("cat"); break;
+      case "catsvc": { const [sid, svid] = v.split("|"); startBooking(sid, svid); break; }
+      case "enter": enterApp(); break;
+      case "toggle-theme": setTheme(isDark() ? "light" : "dark"); render(); break;
+      case "theme": setTheme(v); render(); break;
+      case "edit-profile": state.editProfile = true; render(); { const f = document.getElementById("pf-name"); if (f) f.focus(); } break;
+      case "edit-cancel": state.editProfile = false; render(); break;
+      case "clear-ask": state.clearAsk = true; render(); break;
+      case "clear-no": state.clearAsk = false; render(); break;
+      case "clear-yes":
+        saveBookings([]); saveProfile({ name: "", phone: "", email: "", pref: "all", since: new Date().toISOString() });
+        state.clearAsk = false; render(); toast("تم حذف بياناتك من هذا الجهاز"); break;
       case "back":
-        if (state.step > 0) { state.step--; render(); window.scrollTo(0, 0); } else go("home");
+        if (state.view === "cat") { go(state.prev === "home" ? "home" : "cats"); break; }
+        if (state.step > 0 && !(state.step === 1 && state.bookFrom === "cat" && state.services.length === 1)) { state.step--; render(); window.scrollTo(0, 0); }
+        else go(state.bookFrom === "cat" ? "cat" : "home");
         break;
       case "service": {
         const i = state.services.indexOf(v);
@@ -402,7 +658,36 @@
     }
   });
 
+  /* حفظ بيانات الحساب */
+  $app.addEventListener("submit", (e) => {
+    if (e.target.id !== "profile-form") return;
+    e.preventDefault();
+    const f = e.target;
+    const phone = f.phone.value.replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+    const err = document.getElementById("pf-phone-err");
+    if (phone && !/^05\d{8}$/.test(phone)) { err.hidden = false; f.phone.setAttribute("aria-invalid", "true"); f.phone.focus(); return; }
+    const p = loadProfile();
+    saveProfile({ ...p, name: f.name.value.trim(), phone, email: f.email.value.trim(), pref: f.pref.value });
+    state.filter = f.pref.value;
+    state.editProfile = false; render(); toast("تم حفظ بياناتك");
+  });
+
+  /* تحديث الأيقونة عند تغيّر وضع الجوال وهو على "تلقائي" */
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (currentTheme() === "system") render(); }); } catch (e) { /* متصفح قديم */ }
+
+  /* الواجهة الترحيبية: أول مرة تنتظر زر "ابدأ الآن"، وبعدها تظهر لحظة قصيرة */
+  let splashTimer;
+  function enterApp() {
+    clearTimeout(splashTimer);
+    setItem(WELCOME_KEY, true);
+    const el = document.querySelector(".splash");
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (el && !reduce) { el.classList.add("leaving"); setTimeout(() => go("home"), 280); } else go("home");
+  }
+  state.filter = loadProfile().pref || "all";
+  state.view = "splash";
   render();
+  if (getItem(WELCOME_KEY, false)) splashTimer = setTimeout(enterApp, 1400);
 
   /* تثبيت التطبيق على الجوال والعمل بدون إنترنت */
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
