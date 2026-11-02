@@ -152,7 +152,7 @@
   /* ---------- الشاشات ---------- */
   function viewHome() {
     if (SALON) return viewSalonHome(SALON);
-    const list = DATA.salons.filter((s) => state.filter === "all" || s.type === state.filter);
+    const list = DATA.salons.filter((s) => !s.unlisted && (state.filter === "all" || s.type === state.filter));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
