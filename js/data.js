@@ -2,14 +2,6 @@
    كل صالون يحمل ألوان علامته التجارية، ويتلوّن التطبيق بها أثناء الحجز. */
 window.ENAYATI_DATA = {
   currency: "ر.س",
-  categories: [
-    { id: "hair", name: "الشعر", desc: "قص، تدرّج، صبغة، استشوار" },
-    { id: "beard", name: "اللحية", desc: "تهذيب وتحديد" },
-    { id: "skin", name: "البشرة", desc: "تنظيف وعناية" },
-    { id: "nails", name: "الأظافر", desc: "مناكير وبديكير" },
-    { id: "makeup", name: "المكياج والحواجب", desc: "مناسبات ورسم حواجب" },
-    { id: "kids", name: "الأطفال", desc: "حلاقة الصغار" }
-  ],
   salons: [
     {
       id: "sanad",
@@ -22,11 +14,11 @@ window.ENAYATI_DATA = {
       brand: { primary: "#0E4F4A", accent: "#B8893B" },
       hours: { open: 10, close: 23 },
       services: [
-        { id: "cut", name: "قص شعر", desc: "قص بالمقص والماكينة مع تصفيف", min: 40, price: 60, cat: "hair" },
-        { id: "beard", name: "تهذيب اللحية", desc: "تحديد بالموس وزيت اللحية", min: 25, price: 40, cat: "beard" },
-        { id: "combo", name: "شعر ولحية", desc: "الباقة الكاملة مع منشفة ساخنة", min: 60, price: 90, cat: "hair" },
-        { id: "kids", name: "حلاقة أطفال", desc: "حتى عمر ١٢ سنة", min: 30, price: 40, cat: "kids" },
-        { id: "facial", name: "تنظيف بشرة", desc: "تقشير وقناع طين", min: 35, price: 75, cat: "skin" }
+        { id: "cut", name: "قص شعر", desc: "قص بالمقص والماكينة مع تصفيف", min: 40, price: 60 },
+        { id: "beard", name: "تهذيب اللحية", desc: "تحديد بالموس وزيت اللحية", min: 25, price: 40 },
+        { id: "combo", name: "شعر ولحية", desc: "الباقة الكاملة مع منشفة ساخنة", min: 60, price: 90 },
+        { id: "kids", name: "حلاقة أطفال", desc: "حتى عمر ١٢ سنة", min: 30, price: 40 },
+        { id: "facial", name: "تنظيف بشرة", desc: "تقشير وقناع طين", min: 35, price: 75 }
       ],
       staff: [
         { id: "a", name: "أبو فهد", role: "حلاق أول", years: 14 },
@@ -45,10 +37,10 @@ window.ENAYATI_DATA = {
       brand: { primary: "#1F2A44", accent: "#C4573A" },
       hours: { open: 13, close: 24 },
       services: [
-        { id: "fade", name: "قصة تدرّج", desc: "Fade بجميع درجاته", min: 45, price: 70, cat: "hair" },
-        { id: "cut", name: "قص شعر", desc: "قص وتصفيف", min: 35, price: 55, cat: "hair" },
-        { id: "beard", name: "تحديد لحية", desc: "خط ناعم بالموس", min: 20, price: 35, cat: "beard" },
-        { id: "color", name: "صبغة رجالية", desc: "تغطية الشيب", min: 40, price: 85, cat: "hair" }
+        { id: "fade", name: "قصة تدرّج", desc: "Fade بجميع درجاته", min: 45, price: 70 },
+        { id: "cut", name: "قص شعر", desc: "قص وتصفيف", min: 35, price: 55 },
+        { id: "beard", name: "تحديد لحية", desc: "خط ناعم بالموس", min: 20, price: 35 },
+        { id: "color", name: "صبغة رجالية", desc: "تغطية الشيب", min: 40, price: 85 }
       ],
       staff: [
         { id: "a", name: "ماجد", role: "مختص تدرّج", years: 9 },
@@ -66,11 +58,11 @@ window.ENAYATI_DATA = {
       brand: { primary: "#6B2D4A", accent: "#C99A6B" },
       hours: { open: 11, close: 22 },
       services: [
-        { id: "blow", name: "استشوار", desc: "غسيل وتجفيف وتصفيف", min: 45, price: 120, cat: "hair" },
-        { id: "cut", name: "قص شعر", desc: "قص مع استشارة شكل الوجه", min: 50, price: 150, cat: "hair" },
-        { id: "color", name: "صبغة كاملة", desc: "لون واحد مع العناية", min: 120, price: 380, cat: "hair" },
-        { id: "nails", name: "مناكير وبديكير", desc: "تنظيف وطلاء جل", min: 75, price: 160, cat: "nails" },
-        { id: "makeup", name: "مكياج سهرة", desc: "مكياج كامل مع رموش", min: 60, price: 300, cat: "makeup" }
+        { id: "blow", name: "استشوار", desc: "غسيل وتجفيف وتصفيف", min: 45, price: 120 },
+        { id: "cut", name: "قص شعر", desc: "قص مع استشارة شكل الوجه", min: 50, price: 150 },
+        { id: "color", name: "صبغة كاملة", desc: "لون واحد مع العناية", min: 120, price: 380 },
+        { id: "nails", name: "مناكير وبديكير", desc: "تنظيف وطلاء جل", min: 75, price: 160 },
+        { id: "makeup", name: "مكياج سهرة", desc: "مكياج كامل مع رموش", min: 60, price: 300 }
       ],
       staff: [
         { id: "a", name: "مها", role: "مختصة شعر", years: 12 },
@@ -89,10 +81,10 @@ window.ENAYATI_DATA = {
       brand: { primary: "#2F4A3A", accent: "#D1A04C" },
       hours: { open: 10, close: 21 },
       services: [
-        { id: "facial", name: "جلسة بشرة", desc: "تنظيف عميق وترطيب", min: 60, price: 220, cat: "skin" },
-        { id: "protein", name: "بروتين", desc: "علاج وفرد الشعر", min: 150, price: 550, cat: "hair" },
-        { id: "blow", name: "استشوار", desc: "تجفيف وتصفيف", min: 40, price: 100, cat: "hair" },
-        { id: "brows", name: "رسم حواجب", desc: "تحديد بالخيط", min: 20, price: 50, cat: "makeup" }
+        { id: "facial", name: "جلسة بشرة", desc: "تنظيف عميق وترطيب", min: 60, price: 220 },
+        { id: "protein", name: "بروتين", desc: "علاج وفرد الشعر", min: 150, price: 550 },
+        { id: "blow", name: "استشوار", desc: "تجفيف وتصفيف", min: 40, price: 100 },
+        { id: "brows", name: "رسم حواجب", desc: "تحديد بالخيط", min: 20, price: 50 }
       ],
       staff: [
         { id: "a", name: "لولوة", role: "مختصة بشرة", years: 10 },
