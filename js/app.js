@@ -2,7 +2,8 @@
 (function () {
   "use strict";
 
-  const DATA = window.ENAYATI_DATA;
+  /* الصوالين والحجوزات تأتي من طبقة البيانات (js/store.js) */
+  const DATA = Object.assign({}, window.ENAYATI_DATA, { salons: Store.salons() });
   const CUR = DATA.currency;
 
   /* وضع الصالون الواحد: الرابط ‎?s=sanad‎ يحوّل التطبيق إلى تطبيق خاص بالصالون */
@@ -10,7 +11,6 @@
     try { const id = (new URLSearchParams(location.search).get("s") || "").toLowerCase(); return DATA.salons.find((x) => x.id === id) || null; }
     catch (e) { return null; }
   })();
-  const STORE_KEY = "enayati.bookings.v1";
   const STEPS = ["الخدمة", "المختص", "الموعد", "الدفع"];
   const DAYS_AHEAD = 14;
   const SLOT_MIN = 30;
@@ -47,18 +47,13 @@
     payment: null,
     paying: false,
     lastBooking: null,
-    cancelAsk: null
+    cancelAsk: null,
+    cust: { name: "", phone: "" }
   };
 
   /* ---------- التخزين المحلي ---------- */
-  function loadBookings() {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (e) { return memBookings; }
-  }
-  let memBookings = [];
-  function saveBookings(list) {
-    memBookings = list;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch (e) { /* يعمل بالذاكرة فقط */ }
-  }
+  const loadBookings = () => Store.bookings();
+  const saveBookings = (list) => Store.setBookings(list);
   const mem = {};
   function getItem(k, fallback) {
     try { const v = localStorage.getItem(k); return v === null ? (k in mem ? mem[k] : fallback) : JSON.parse(v); } catch (e) { return k in mem ? mem[k] : fallback; }
@@ -110,14 +105,13 @@
     return m ? `${hs} و${m} دقيقة` : hs;
   }
   const fmtDate = (iso, opts) => parseISO(iso).toLocaleDateString(LOCALE, opts || { weekday: "long", day: "numeric", month: "long" });
-  const initials = (name) => name.replace(/^(صالون|ستوديو|ال)\s*/, "").trim().charAt(0);
+  const initials = (name) => name.replace(/^(صالون|ستوديو)\s+/, "").replace(/^ال(?=\S{2})/, "").trim().charAt(0);
 
-  /* توفّر تجريبي ثابت: بعض الأوقات محجوزة مسبقاً لكل مختص */
-  function hash(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  /* الوقت محجوز إذا تداخل مع حجز قائم لنفس المختص */
   function isBusy(salonId, staffId, date, minute) {
     const mine = loadBookings().some((b) => b.status !== "cancelled" && b.salonId === salonId && b.staffId === staffId && b.date === date &&
       minute < toMin(b.time) + b.minutes && minute + SLOT_MIN > toMin(b.time));
-    return mine || hash(`${salonId}|${staffId}|${date}|${minute}`) % 100 < 32;
+    return mine;
   }
   function freeStaff(s, date, start, duration, staffId) {
     const pool = staffId && staffId !== "any" ? s.staff.filter((p) => p.id === staffId) : s.staff;
@@ -152,7 +146,7 @@
   /* ---------- الشاشات ---------- */
   function viewHome() {
     if (SALON) return viewSalonHome(SALON);
-    const list = DATA.salons.filter((s) => !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    const list = DATA.salons.filter((s) => s.status === "active" && !s.unlisted && (state.filter === "all" || s.type === state.filter));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
@@ -239,7 +233,9 @@
             ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>` : ""}
             <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
           </div>
-          <button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>
+          ${s.status === "active" && s.services.length
+            ? `<button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>`
+            : `<p class="hero-note">${s.status === "active" ? "يجهّز الصالون قائمة خدماته، والحجز متاح قريباً." : "الحجز عبر التطبيق متوقف مؤقتاً. تواصل مع الصالون مباشرة."}</p>`}
         </div>
         ${nextVisitCard()}
 
@@ -312,6 +308,7 @@
   }
 
   function stepServices(s) {
+    if (!s.services.length) return `<div class="empty"><p>لا توجد خدمات متاحة للحجز في هذا الصالون حالياً.</p></div>`;
     return `<div><h2 class="section-title">اختر الخدمة</h2><p class="hint">يمكنك اختيار أكثر من خدمة.</p></div>
       ${servicesHtml(s, (sv) => `
         <button type="button" class="option with-check" data-act="service" data-v="${sv.id}" aria-pressed="${state.services.includes(sv.id)}">
@@ -338,14 +335,15 @@
     const base = new Date(); base.setHours(0, 0, 0, 0);
     const days = [];
     for (let i = 0; i < DAYS_AHEAD; i++) { const d = new Date(base); d.setDate(base.getDate() + i); days.push(isoDate(d)); }
-    if (!state.date) state.date = days[0];
+    const closed = (iso) => (salon().closedDays || []).includes(parseISO(iso).getDay());
+    if (!state.date || closed(state.date)) state.date = days.find((d) => !closed(d)) || days[0];
     const dayBtns = days.map((iso, i) => {
       const d = parseISO(iso);
       const dow = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString(LOCALE, { weekday: "short" });
-      return `<button type="button" role="radio" class="day" data-act="date" data-v="${iso}" aria-checked="${state.date === iso}" aria-label="${fmtDate(iso)}">
+      return `<button type="button" role="radio" class="day" data-act="date" data-v="${iso}" aria-checked="${state.date === iso}" aria-label="${fmtDate(iso)}${closed(iso) ? " (مغلق)" : ""}" ${closed(iso) ? "disabled" : ""}>
         <span class="dow">${dow}</span><span class="dnum num">${d.getDate()}</span><span class="mon">${d.toLocaleDateString(LOCALE, { month: "short" })}</span></button>`;
     }).join("");
-    const slots = slotsFor(state.date);
+    const slots = closed(state.date) ? [] : slotsFor(state.date);
     const groups = [["صباحاً", (m) => m < 12 * 60], ["ظهراً وعصراً", (m) => m >= 12 * 60 && m < 18 * 60], ["مساءً", (m) => m >= 18 * 60]];
     const freeCount = slots.filter((x) => x.free).length;
     const periods = groups.map(([label, fn]) => {
@@ -377,11 +375,22 @@
           <span class="title">${esc(p.name)}</span><span></span>
           <span class="sub">${esc(p.note)}</span>
         </button>`).join("")}</div>
+      <div><h3 class="section-title" style="font-size:var(--fs-md)">بياناتك</h3><p class="hint">يصل اسمك ورقمك للصالون ليتواصل معك عند الحاجة.</p></div>
+      <div class="card form">
+        <label for="cu-name">الاسم</label>
+        <input id="cu-name" data-cust="name" type="text" autocomplete="name" value="${esc(state.cust.name)}" placeholder="مثال: عبدالعزيز">
+        <label for="cu-phone">رقم الجوال</label>
+        <input id="cu-phone" data-cust="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(state.cust.phone)}" placeholder="05XXXXXXXX">
+        <p class="field-error" id="cu-err" ${state.cust.phone && !validPhone(state.cust.phone) ? "" : "hidden"}>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
+      </div>
       <p class="demo-note">نسخة تجريبية: لا يتم خصم أي مبلغ. يُربط الدفع لاحقاً ببوابة دفع (مثل Moyasar أو HyperPay).</p>`;
   }
 
+  const normPhone = (v) => String(v || "").replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+  const validPhone = (v) => /^05\d{8}$/.test(normPhone(v));
   function canNext() {
-    return [state.services.length > 0, !!state.staffId, !!(state.date && state.time), !!state.payment && !state.paying][state.step];
+    const custOk = state.cust.name.trim().length >= 2 && validPhone(state.cust.phone);
+    return [state.services.length > 0, !!state.staffId, !!(state.date && state.time), !!state.payment && custOk && !state.paying][state.step];
   }
 
   function viewBook() {
@@ -430,7 +439,9 @@
   }
 
   function bookingStatus(b) {
-    if (b.status === "cancelled") return ["cancelled", "ملغى"];
+    if (b.status === "cancelled") return ["cancelled", b.cancelledBy === "salon" ? "ألغاه الصالون" : "ملغى"];
+    if (b.status === "noshow") return ["noshow", "لم يحضر"];
+    if (b.status === "completed") return ["past", "مكتمل"];
     const end = parseISO(b.date); end.setMinutes(toMin(b.time) + b.minutes);
     return end < new Date() ? ["past", "منتهٍ"] : ["upcoming", "قادم"];
   }
@@ -577,6 +588,11 @@
                 <button type="button" class="btn danger" data-act="clear-yes">نعم، احذف</button><button type="button" class="btn ghost" data-act="clear-no">تراجع</button></div></div>`
             : `<button type="button" class="btn danger wide" data-act="clear-ask">حذف بياناتي من الجهاز</button>`}
         </div>
+        <div class="panel-links">
+          <span>لأصحاب الصوالين:</span>
+          <a href="dashboard.html${SALON ? `?s=${SALON.id}` : ""}">لوحة الصالون</a>
+          ${SALON ? "" : `<a href="admin.html">إدارة عناياتي</a>`}
+        </div>
       </section>${tabbar("profile")}`;
   }
 
@@ -620,7 +636,8 @@
   }
 
   function startBooking(id, serviceId) {
-    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null });
+    const p = loadProfile();
+    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: p.phone || "" } });
     go("book");
   }
 
@@ -641,9 +658,12 @@
         code: makeCode(), salonId: s.id, staffId: person.id, staffName: person.name,
         services: state.services.slice(), serviceNames: chosenServices().map((x) => x.name),
         date: state.date, time: state.time, minutes: totalMin(), total: totalPrice(),
-        payment: state.payment, status: "confirmed", createdAt: new Date().toISOString()
+        payment: state.payment, status: "confirmed", createdAt: new Date().toISOString(),
+        customer: { name: state.cust.name.trim(), phone: normPhone(state.cust.phone) }
       };
-      saveBookings([...loadBookings(), b]);
+      Store.addBooking(b);
+      const p = loadProfile();
+      if (!p.name || !p.phone) saveProfile({ ...p, name: p.name || b.customer.name, phone: p.phone || b.customer.phone });
       state.paying = false; state.lastBooking = b;
       go("done");
     }, 900);
@@ -666,7 +686,7 @@
       case "filter": state.filter = v; render(); break;
       case "salon": startBooking(v); break;
       case "rebook": startBooking(v); break;
-      case "salon-svc": startBooking(SALON.id, v); break;
+      case "salon-svc": if (SALON.status === "active") startBooking(SALON.id, v); else toast("الحجز متوقف مؤقتاً"); break;
       case "home": go("home"); break;
       case "mine": go("mine"); break;
       case "profile": go("profile"); break;
@@ -704,6 +724,16 @@
     }
   });
 
+  /* بيانات العميل في خطوة الدفع */
+  $app.addEventListener("input", (e) => {
+    const k = e.target.dataset && e.target.dataset.cust;
+    if (!k) return;
+    state.cust[k] = e.target.value;
+    const btn = $app.querySelector('[data-act="next"]');
+    if (btn) btn.disabled = !canNext();
+    if (k === "phone") { const err = document.getElementById("cu-err"); const v = e.target.value; err.hidden = !v || normPhone(v).length < 10 || validPhone(v); }
+  });
+
   /* حفظ بيانات الحساب */
   $app.addEventListener("submit", (e) => {
     if (e.target.id !== "profile-form") return;
@@ -733,13 +763,20 @@
   if (SALON) {
     document.title = SALON.name;
     const set = (sel, attr, val) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, val); };
-    set('link[rel="manifest"]', "href", `manifests/${SALON.id}.webmanifest`);
-    set('link[rel="apple-touch-icon"]', "href", `icons/salons/${SALON.id}-180.png`);
-    set('link[rel="icon"]', "href", `icons/salons/${SALON.id}-192.png`);
-    set('link[rel="icon"]', "type", "image/png");
+    if (SALON.assets) {
+      set('link[rel="manifest"]', "href", `manifests/${SALON.id}.webmanifest`);
+      set('link[rel="apple-touch-icon"]', "href", `icons/salons/${SALON.id}-180.png`);
+      set('link[rel="icon"]', "href", `icons/salons/${SALON.id}-192.png`);
+      set('link[rel="icon"]', "type", "image/png");
+    }
     set('meta[name="apple-mobile-web-app-title"]', "content", SALON.name);
     set('meta[name="description"]', "content", `${SALON.name}: ${SALON.slogan}. احجز موعدك بخطوات بسيطة.`);
   }
+  Store.onChange(() => {
+    DATA.salons = Store.salons();
+    if (SALON) Object.assign(SALON, Store.salon(SALON.id) || {});
+    if (state.view !== "splash" && state.view !== "book") render();
+  });
   state.filter = loadProfile().pref || "all";
   state.view = "splash";
   render();
