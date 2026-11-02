@@ -1,0 +1,25 @@
+/*
+  خط ثمانية (Thmanyah Sans)
+  ترخيص الخط لا يسمح بإعادة توزيع ملفاته ضمن المستودع، لذلك لا تُرفع الملفات هنا.
+  1) نزّل الخط من https://font.thmanyah.com
+  2) ضع ملفات woff2 (أو otf) في هذا المجلد بالأسماء أدناه.
+  إن كان الخط مثبتاً على الجهاز فسيُستخدم مباشرة عبر local().
+*/
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: local("Thmanyah Sans"), local("ThmanyahSans-Regular"),
+       url("thmanyah-sans-Regular.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: local("Thmanyah Sans Medium"), local("ThmanyahSans-Medium"),
+       url("thmanyah-sans-Medium.woff2") format("woff2");
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Thmanyah Sans";
+  src: local("Thmanyah Sans Bold"), local("ThmanyahSans-Bold"),
+       url("thmanyah-sans-Bold.woff2") format("woff2");
+  font-weight: 700; font-style: normal; font-display: swap;
+}
