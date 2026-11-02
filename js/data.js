@@ -102,6 +102,51 @@ window.ENAYATI_DATA = {
         { id: "a", name: "لولوة", role: "مختصة بشرة", years: 10 },
         { id: "b", name: "سارة", role: "مختصة شعر", years: 8 }
       ]
+    },
+    {
+      id: "asrar",
+      name: "صالون أسرار العناية",
+      type: "men",
+      tagline: "حلاقة، صبغة، وعناية بالوجه والشعر",
+      area: "",
+      slogan: "سرّ أناقتك عندنا",
+      about: "صالون رجالي يقدّم الحلاقة بأنواعها، والصبغة، والعناية بالوجه والبشرة والشعر، بأيدي فريق من الحلاقين ذوي الخبرة.",
+      address: "",
+      brand: { primary: "#2F5233", accent: "#D98A2B" },
+      hours: { open: 14, close: 24 },
+      services: [
+        { id: "beard", name: "حلاقة دقن", min: 20, price: 25, group: "الحلاقة" },
+        { id: "cut", name: "حلاقة شعر رجال", min: 30, price: 30, group: "الحلاقة" },
+        { id: "machine", name: "حلاقة شعر مكينة", min: 20, price: 20, group: "الحلاقة" },
+        { id: "razor", name: "حلاقة شعر موس", min: 25, price: 25, group: "الحلاقة" },
+        { id: "kids", name: "حلاقة شعر أطفال", min: 25, price: 25, group: "الحلاقة" },
+        { id: "dye-short", name: "صبغة شعر رأس قصير", min: 40, price: 70, group: "الصبغة" },
+        { id: "dye-long", name: "صبغة شعر رأس طويل", min: 60, price: 100, group: "الصبغة" },
+        { id: "dye-beard-short", name: "صبغة دقن قصيرة", min: 20, price: 30, group: "الصبغة" },
+        { id: "dye-beard-long", name: "صبغة دقن طويل", min: 30, price: 50, group: "الصبغة" },
+        { id: "dye-goatee", name: "صبغة سكسوكة", min: 15, price: 20, group: "الصبغة" },
+        { id: "dye-mustache", name: "صبغة شنب", min: 10, price: 10, group: "الصبغة" },
+        { id: "mask-cashmere", name: "قناع وجه كاسمرا", min: 25, price: 50, group: "العناية بالوجه والبشرة" },
+        { id: "mask-whitening", name: "قناع وجه مبيض", min: 20, price: 15, group: "العناية بالوجه والبشرة" },
+        { id: "mask-tunisian", name: "قناع وجه تونسي", min: 20, price: 10, group: "العناية بالوجه والبشرة" },
+        { id: "wax", name: "إزالة شعر الوجه بالشمع", min: 15, price: 10, group: "العناية بالوجه والبشرة" },
+        { id: "facial", name: "تنظيف بشرة", min: 45, price: 120, group: "العناية بالوجه والبشرة" },
+        { id: "scrub", name: "سنفرة وجه مع بخار", min: 20, price: 15, group: "العناية بالوجه والبشرة" },
+        { id: "wash", name: "غسيل شعر", min: 10, price: 10, group: "العناية بالشعر" },
+        { id: "oil-short", name: "حمام زيت شعر قصير", min: 30, price: 60, group: "العناية بالشعر" },
+        { id: "oil-long", name: "حمام زيت شعر طويل", min: 45, price: 80, group: "العناية بالشعر" },
+        { id: "straight-short", name: "فرد شعر قصير", min: 60, price: 100, group: "العناية بالشعر" },
+        { id: "straight-long", name: "فرد شعر طويل", min: 90, price: 120, group: "العناية بالشعر" },
+        { id: "ceramic", name: "تسريحة سراميك", min: 30, price: 40, group: "العناية بالشعر" },
+        { id: "blow-short", name: "سشوار شعر قصير", min: 20, price: 30, group: "العناية بالشعر" },
+        { id: "blow-long", name: "سشوار شعر طويل", min: 30, price: 40, group: "العناية بالشعر" }
+      ],
+      staff: [
+        { id: "a", name: "عبدالقادر", role: "حلاق" },
+        { id: "b", name: "ياسر", role: "حلاق" },
+        { id: "c", name: "رمزي", role: "حلاق" },
+        { id: "d", name: "زياد", role: "حلاق" }
+      ]
     }
   ],
   payments: [

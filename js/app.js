@@ -162,8 +162,8 @@
           <h3>${esc(s.name)}</h3>
           <p>${esc(s.tagline)}</p>
           <span class="meta">
-            <span><b class="num">${I.star} ${s.rating}</b> (${s.reviews})</span>
-            <span>${esc(s.area)}</span>
+            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews})</span>` : ""}
+            ${s.area ? `<span>${esc(s.area)}</span>` : ""}
             <span class="num">${fmtTime(fromMin(s.hours.open * 60))} – ${fmtTime(fromMin(s.hours.close * 60))}</span>
           </span>
         </span>
@@ -185,6 +185,19 @@
         </div>
       </section>${tabbar("home")}`;
   }
+
+  function servicesHtml(s, item, label) {
+    const groups = [];
+    s.services.forEach((sv) => {
+      const g = sv.group || "";
+      let last = groups[groups.length - 1];
+      if (!last || last.name !== g) { last = { name: g, items: [] }; groups.push(last); }
+      last.items.push(sv);
+    });
+    return groups.map((g) => `${g.name ? `<h3 class="group-title">${esc(g.name)}</h3>` : ""}
+      <div class="options" role="group" aria-label="${esc(g.name || label)}">${g.items.map(item).join("")}</div>`).join("");
+  }
+  const svcSub = (sv) => `${sv.desc ? `${esc(sv.desc)} · ` : ""}<span class="num">${fmtDuration(sv.min)}</span>`;
 
   function nextVisitCard() {
     const next = upcomingBookings()[0];
@@ -223,7 +236,7 @@
             <p class="slogan">${esc(s.slogan)}</p>
           </div>
           <div class="hero-meta">
-            <span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>
+            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>` : ""}
             <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
           </div>
           <button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>
@@ -232,13 +245,13 @@
 
         <div class="block">
           <h2 class="section-title">الخدمات والأسعار</h2>
-          <div class="options">${s.services.map((sv) => `
+          ${servicesHtml(s, (sv) => `
             <button type="button" class="option svc" data-act="salon-svc" data-v="${sv.id}">
               <span class="title">${esc(sv.name)}</span>
               <span class="price num">${money(sv.price)}</span>
-              <span class="sub">${esc(sv.desc)} · <span class="num">${fmtDuration(sv.min)}</span></span>
+              <span class="sub">${svcSub(sv)}</span>
               <span class="go" aria-hidden="true">احجز</span>
-            </button>`).join("")}</div>
+            </button>`, "الخدمات والأسعار")}
         </div>
 
         <div class="block">
@@ -247,7 +260,7 @@
             <div class="member">
               <span class="avatar" aria-hidden="true">${esc(m.name.charAt(0))}</span>
               <span class="name">${esc(m.name)}</span>
-              <span class="role">${esc(m.role)} · <span class="num">${m.years}</span> سنة</span>
+              <span class="role">${esc(m.role)}${m.years ? ` · <span class="num">${m.years}</span> سنة` : ""}</span>
             </div>`).join("")}</div>
         </div>
 
@@ -255,10 +268,10 @@
           <h2 class="section-title">عن ${esc(s.name)}</h2>
           <p class="about">${esc(s.about)}</p>
           <div class="card">
-            <div class="row"><span>العنوان</span><span>${esc(s.address)}</span></div>
+            ${s.address ? `<div class="row"><span>العنوان</span><span>${esc(s.address)}</span></div>` : ""}
             <div class="row"><span>ساعات العمل</span><span class="num">يومياً ${fmtTime(fromMin(s.hours.open * 60))} – ${fmtTime(fromMin(s.hours.close * 60))}</span></div>
           </div>
-          <a class="btn ghost wide map-link" href="${maps}" target="_blank" rel="noopener">افتح الموقع في الخرائط</a>
+          ${s.address ? `<a class="btn ghost wide map-link" href="${maps}" target="_blank" rel="noopener">افتح الموقع في الخرائط</a>` : ""}
         </div>
 
         <a class="powered" href="./">يعمل بواسطة <b>عناياتي</b></a>
@@ -294,19 +307,19 @@
   function salonHead(s) {
     return `<div class="salon-head">
       <span class="monogram" aria-hidden="true">${esc(initials(s.name))}</span>
-      <div><h2 style="font-size:var(--fs-lg)">${esc(s.name)}</h2><p>${esc(s.area)} · ${s.type === "men" ? "رجالي" : "نسائي"}</p></div>
+      <div><h2 style="font-size:var(--fs-lg)">${esc(s.name)}</h2><p>${s.area ? `${esc(s.area)} · ` : ""}${s.type === "men" ? "رجالي" : "نسائي"}</p></div>
     </div>`;
   }
 
   function stepServices(s) {
     return `<div><h2 class="section-title">اختر الخدمة</h2><p class="hint">يمكنك اختيار أكثر من خدمة.</p></div>
-      <div class="options" role="group" aria-label="الخدمات">${s.services.map((sv) => `
+      ${servicesHtml(s, (sv) => `
         <button type="button" class="option with-check" data-act="service" data-v="${sv.id}" aria-pressed="${state.services.includes(sv.id)}">
           <span class="check">${I.check}</span>
           <span class="title">${esc(sv.name)}</span>
           <span class="price num">${money(sv.price)}</span>
-          <span class="sub">${esc(sv.desc)} · <span class="num">${fmtDuration(sv.min)}</span></span>
-        </button>`).join("")}</div>`;
+          <span class="sub">${svcSub(sv)}</span>
+        </button>`, "الخدمات")}`;
   }
 
   function stepStaff(s) {
