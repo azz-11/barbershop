@@ -403,4 +403,11 @@
   });
 
   render();
+
+  /* تثبيت التطبيق على الجوال والعمل بدون إنترنت */
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => { /* المتصفح لا يسمح، والتطبيق يعمل بدونه */ });
+    });
+  }
 })();
