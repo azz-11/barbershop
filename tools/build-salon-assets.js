@@ -17,7 +17,7 @@ require(path.join(ROOT, "js/data.js"));
 const { salons } = global.window.ENAYATI_DATA;
 
 const FONT = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;700&display=swap">';
-const initials = (name) => name.replace(/^(صالون|ستوديو|ال)\s*/, "").trim().charAt(0);
+const initials = (name) => name.replace(/^(صالون|ستوديو)\s+/, "").replace(/^ال(?=\S{2})/, "").trim().charAt(0);
 const mk = (d) => fs.mkdirSync(path.join(ROOT, d), { recursive: true });
 
 function iconHtml(s, size) {

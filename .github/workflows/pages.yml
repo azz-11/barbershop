@@ -23,7 +23,7 @@ jobs:
       - name: تجهيز ملفات الموقع
         run: |
           mkdir -p _site
-          cp -r index.html manifest.webmanifest sw.js css js fonts icons manifests _site/
+          cp -r index.html dashboard.html admin.html manifest.webmanifest sw.js css js fonts icons manifests _site/
           touch _site/.nojekyll
 
       - name: النشر إلى فرع gh-pages
