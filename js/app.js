@@ -4,6 +4,12 @@
 
   const DATA = window.ENAYATI_DATA;
   const CUR = DATA.currency;
+
+  /* وضع الصالون الواحد: الرابط ‎?s=sanad‎ يحوّل التطبيق إلى تطبيق خاص بالصالون */
+  const SALON = (() => {
+    try { const id = (new URLSearchParams(location.search).get("s") || "").toLowerCase(); return DATA.salons.find((x) => x.id === id) || null; }
+    catch (e) { return null; }
+  })();
   const STORE_KEY = "enayati.bookings.v1";
   const STEPS = ["الخدمة", "المختص", "الموعد", "الدفع"];
   const DAYS_AHEAD = 14;
@@ -61,7 +67,7 @@
 
   const PROFILE_KEY = "enayati.profile.v1";
   const THEME_KEY = "enayati.theme";
-  const WELCOME_KEY = "enayati.welcomed";
+  const WELCOME_KEY = "enayati.welcomed" + (SALON ? ":" + SALON.id : "");
   const loadProfile = () => getItem(PROFILE_KEY, { name: "", phone: "", email: "", pref: "all", since: new Date().toISOString() });
   function saveProfile(p) { setItem(PROFILE_KEY, p); }
 
@@ -74,6 +80,9 @@
   const isDark = () => { const t = currentTheme(); return t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches); };
   function setTheme(t) { setItem(THEME_KEY, t); applyTheme(t); }
   applyTheme(currentTheme());
+
+  /* في وضع الصالون تظهر حجوزات هذا الصالون فقط */
+  const myBookings = () => loadBookings().filter((b) => !SALON || b.salonId === SALON.id);
 
   /* ---------- أدوات ---------- */
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -142,6 +151,7 @@
 
   /* ---------- الشاشات ---------- */
   function viewHome() {
+    if (SALON) return viewSalonHome(SALON);
     const list = DATA.salons.filter((s) => state.filter === "all" || s.type === state.filter);
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
@@ -162,15 +172,7 @@
     const p = loadProfile();
     const h = new Date().getHours();
     const greet = h < 12 ? "صباح الخير" : "مساء الخير";
-    const next = upcomingBookings()[0];
-    const nextCard = next ? (() => {
-      const s = DATA.salons.find((x) => x.id === next.salonId);
-      return `<button type="button" class="next-visit" data-act="mine">
-        <span class="next-label">موعدك القادم</span>
-        <span class="next-main">${esc(s.name)} · ${next.serviceNames.map(esc).join("، ")}</span>
-        <span class="next-when">${fmtDate(next.date)} · <span class="num">${fmtTime(next.time)}</span></span>
-      </button>`;
-    })() : "";
+    const nextCard = nextVisitCard();
     return `
       <section class="screen">
         ${topbar()}
@@ -184,6 +186,85 @@
       </section>${tabbar("home")}`;
   }
 
+  function nextVisitCard() {
+    const next = upcomingBookings()[0];
+    if (!next) return "";
+    const s = DATA.salons.find((x) => x.id === next.salonId);
+    return `<button type="button" class="next-visit" data-act="mine">
+        <span class="next-label">موعدك القادم</span>
+        <span class="next-main">${SALON ? "" : `${esc(s.name)} · `}${next.serviceNames.map(esc).join("، ")}</span>
+        <span class="next-when">${fmtDate(next.date)} · <span class="num">${fmtTime(next.time)}</span></span>
+      </button>`;
+  }
+
+  function openStatus(s) {
+    const now = new Date();
+    const m = now.getHours() * 60 + now.getMinutes();
+    const open = m >= s.hours.open * 60 && m < s.hours.close * 60;
+    return open
+      ? { open, text: `مفتوح الآن · يغلق ${fmtTime(fromMin(s.hours.close * 60))}` }
+      : { open, text: `مغلق الآن · يفتح ${fmtTime(fromMin(s.hours.open * 60))}` };
+  }
+
+  /* الصفحة الرئيسية في وضع الصالون الواحد */
+  function viewSalonHome(s) {
+    const st = openStatus(s);
+    const p = loadProfile();
+    const h = new Date().getHours();
+    const greet = `${h < 12 ? "صباح الخير" : "مساء الخير"}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}`;
+    const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.name + " " + s.address);
+    return `<section class="screen">
+        ${topbar()}
+        <div class="salon-hero">
+          <span class="monogram xl" aria-hidden="true">${esc(initials(s.name))}</span>
+          <div class="salon-hero-text">
+            <p class="greet-on">${greet}</p>
+            <h1>${esc(s.name)}</h1>
+            <p class="slogan">${esc(s.slogan)}</p>
+          </div>
+          <div class="hero-meta">
+            <span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>
+            <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
+          </div>
+          <button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>
+        </div>
+        ${nextVisitCard()}
+
+        <div class="block">
+          <h2 class="section-title">الخدمات والأسعار</h2>
+          <div class="options">${s.services.map((sv) => `
+            <button type="button" class="option svc" data-act="salon-svc" data-v="${sv.id}">
+              <span class="title">${esc(sv.name)}</span>
+              <span class="price num">${money(sv.price)}</span>
+              <span class="sub">${esc(sv.desc)} · <span class="num">${fmtDuration(sv.min)}</span></span>
+              <span class="go" aria-hidden="true">احجز</span>
+            </button>`).join("")}</div>
+        </div>
+
+        <div class="block">
+          <h2 class="section-title">${s.type === "men" ? "فريق الحلاقين" : "فريق المختصات"}</h2>
+          <div class="team">${s.staff.map((m) => `
+            <div class="member">
+              <span class="avatar" aria-hidden="true">${esc(m.name.charAt(0))}</span>
+              <span class="name">${esc(m.name)}</span>
+              <span class="role">${esc(m.role)} · <span class="num">${m.years}</span> سنة</span>
+            </div>`).join("")}</div>
+        </div>
+
+        <div class="block">
+          <h2 class="section-title">عن ${esc(s.name)}</h2>
+          <p class="about">${esc(s.about)}</p>
+          <div class="card">
+            <div class="row"><span>العنوان</span><span>${esc(s.address)}</span></div>
+            <div class="row"><span>ساعات العمل</span><span class="num">يومياً ${fmtTime(fromMin(s.hours.open * 60))} – ${fmtTime(fromMin(s.hours.close * 60))}</span></div>
+          </div>
+          <a class="btn ghost wide map-link" href="${maps}" target="_blank" rel="noopener">افتح الموقع في الخرائط</a>
+        </div>
+
+        <a class="powered" href="./">يعمل بواسطة <b>عناياتي</b></a>
+      </section>${tabbar("home")}`;
+  }
+
   function themeBtn() {
     const dark = isDark();
     return `<button type="button" class="icon-btn" data-act="toggle-theme" aria-label="${dark ? "الوضع النهاري" : "الوضع الليلي"}" title="${dark ? "الوضع النهاري" : "الوضع الليلي"}">${dark ? I.sun : I.moon}</button>`;
@@ -193,12 +274,14 @@
     if (back) {
       return `<header class="topbar">
         <button type="button" class="icon-btn" data-act="back" aria-label="رجوع">${I.back}</button>
-        <div class="logo">${esc(title || "عناياتي")}</div>
+        <div class="logo">${esc(title || (SALON ? SALON.name : "عناياتي"))}</div>
         ${themeBtn()}
       </header>`;
     }
+    const mark = SALON ? `<span class="logo-mark salon-mark">${esc(initials(SALON.name))}</span>${esc(SALON.name)}`
+      : `<span class="logo-mark">${I.scissors.replace("<svg", '<svg width="20" height="20"')}</span>عناياتي`;
     return `<header class="topbar">
-      <div class="logo"><span class="logo-mark">${I.scissors.replace("<svg", '<svg width="20" height="20"')}</span>عناياتي</div>
+      <div class="logo">${mark}</div>
       ${themeBtn()}
     </header>`;
   }
@@ -340,7 +423,7 @@
   }
 
   function viewMine() {
-    const list = loadBookings().slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    const list = myBookings().slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const items = list.map((b) => {
       const s = DATA.salons.find((x) => x.id === b.salonId);
       const [cls, txt] = bookingStatus(b);
@@ -380,12 +463,12 @@
     </div></nav>`;
   }
 
-  const upcomingBookings = () => loadBookings().filter((b) => bookingStatus(b)[0] === "upcoming")
+  const upcomingBookings = () => myBookings().filter((b) => bookingStatus(b)[0] === "upcoming")
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
   /* ---------- حسابي ---------- */
   function profileStats() {
-    const all = loadBookings();
+    const all = myBookings();
     const visits = all.filter((b) => bookingStatus(b)[0] === "past");
     const spent = visits.reduce((a, b) => a + b.total, 0);
     const count = (arr, key) => arr.reduce((m, x) => { m[key(x)] = (m[key(x)] || 0) + 1; return m; }, {});
@@ -487,6 +570,18 @@
   /* ---------- الواجهة الترحيبية ---------- */
   function viewSplash() {
     const first = !getItem(WELCOME_KEY, false);
+    if (SALON) {
+      return `<section class="splash salon-splash" aria-label="مرحباً بك في ${esc(SALON.name)}">
+        <div class="splash-mark mono" aria-hidden="true">${esc(initials(SALON.name))}</div>
+        <h1 class="splash-name">${esc(SALON.name)}</h1>
+        <p class="splash-line">${esc(SALON.slogan)}</p>
+        ${first
+          ? `<p class="splash-sub">احجز موعدك في ${esc(SALON.name)} بخطوات بسيطة.</p>
+             <button type="button" class="btn splash-btn" data-act="enter">ابدأ الآن</button>`
+          : `<button type="button" class="splash-skip" data-act="enter">دخول</button>`}
+        <p class="splash-powered">يعمل بواسطة عناياتي</p>
+      </section>`;
+    }
     return `<section class="splash ${first ? "first" : ""}" aria-label="مرحباً بك في عناياتي">
       <div class="splash-mark" aria-hidden="true">${I.scissors}</div>
       <h1 class="splash-name">عناياتي</h1>
@@ -500,10 +595,10 @@
 
   /* ---------- العرض ---------- */
   function render() {
-    applyBrand(state.view === "book" || state.view === "done" ? salon() : null);
+    applyBrand(SALON || (state.view === "book" || state.view === "done" ? salon() : null));
     $app.innerHTML = { splash: viewSplash, home: viewHome, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile }[state.view]();
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && state.view === "splash") meta.setAttribute("content", "#0E4F4A");
+    if (meta && state.view === "splash") meta.setAttribute("content", SALON ? SALON.brand.primary : "#0E4F4A");
   }
   function go(view) {
     if (view !== state.view) state.prev = state.view;
@@ -511,8 +606,8 @@
     render(); window.scrollTo(0, 0);
   }
 
-  function startBooking(id) {
-    Object.assign(state, { salonId: id, step: 0, services: [], staffId: null, date: null, time: null, payment: null });
+  function startBooking(id, serviceId) {
+    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null });
     go("book");
   }
 
@@ -558,6 +653,7 @@
       case "filter": state.filter = v; render(); break;
       case "salon": startBooking(v); break;
       case "rebook": startBooking(v); break;
+      case "salon-svc": startBooking(SALON.id, v); break;
       case "home": go("home"); break;
       case "mine": go("mine"); break;
       case "profile": go("profile"); break;
@@ -620,6 +716,16 @@
     const el = document.querySelector(".splash");
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (el && !reduce) { el.classList.add("leaving"); setTimeout(() => go("home"), 280); } else go("home");
+  }
+  if (SALON) {
+    document.title = SALON.name;
+    const set = (sel, attr, val) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, val); };
+    set('link[rel="manifest"]', "href", `manifests/${SALON.id}.webmanifest`);
+    set('link[rel="apple-touch-icon"]', "href", `icons/salons/${SALON.id}-180.png`);
+    set('link[rel="icon"]', "href", `icons/salons/${SALON.id}-192.png`);
+    set('link[rel="icon"]', "type", "image/png");
+    set('meta[name="apple-mobile-web-app-title"]', "content", SALON.name);
+    set('meta[name="description"]', "content", `${SALON.name}: ${SALON.slogan}. احجز موعدك بخطوات بسيطة.`);
   }
   state.filter = loadProfile().pref || "all";
   state.view = "splash";

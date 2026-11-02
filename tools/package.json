@@ -1,0 +1,7 @@
+{
+  "name": "enayati-tools",
+  "private": true,
+  "description": "أدوات توليد ملفات الصوالين: الأيقونات، ملفات التثبيت، وبطاقات QR",
+  "scripts": { "salons": "node build-salon-assets.js" },
+  "devDependencies": { "qrcode": "1.5.4" }
+}
