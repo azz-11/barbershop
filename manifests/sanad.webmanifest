@@ -1,0 +1,28 @@
+{
+  "name": "صالون سَنَد",
+  "short_name": "صالون سَنَد",
+  "description": "حلاقتك بيد تعرفك. احجز موعدك في صالون سَنَد.",
+  "lang": "ar",
+  "dir": "rtl",
+  "id": "../?s=sanad",
+  "start_url": "../?s=sanad",
+  "scope": "../",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E4F4A",
+  "theme_color": "#0E4F4A",
+  "icons": [
+    {
+      "src": "../icons/salons/sanad-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/salons/sanad-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
