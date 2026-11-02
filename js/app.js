@@ -146,7 +146,7 @@
   /* ---------- الشاشات ---------- */
   function viewHome() {
     if (SALON) return viewSalonHome(SALON);
-    const list = DATA.salons.filter((s) => s.status === "active" && !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    const list = DATA.salons.filter((s) => Store.isLive(s) && s.services.length && !s.unlisted && (state.filter === "all" || s.type === state.filter));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
@@ -233,9 +233,9 @@
             ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>` : ""}
             <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
           </div>
-          ${s.status === "active" && s.services.length
+          ${Store.isLive(s) && s.services.length
             ? `<button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>`
-            : `<p class="hero-note">${s.status === "active" ? "يجهّز الصالون قائمة خدماته، والحجز متاح قريباً." : "الحجز عبر التطبيق متوقف مؤقتاً. تواصل مع الصالون مباشرة."}</p>`}
+            : `<p class="hero-note">${Store.isLive(s) ? "يجهّز الصالون قائمة خدماته، والحجز متاح قريباً." : "الحجز عبر التطبيق متوقف مؤقتاً. تواصل مع الصالون مباشرة."}</p>`}
         </div>
         ${nextVisitCard()}
 
@@ -636,6 +636,7 @@
   }
 
   function startBooking(id, serviceId) {
+    if (!Store.isLive(Store.salon(id))) { toast("الحجز في هذا الصالون متوقف مؤقتاً"); return; }
     const p = loadProfile();
     Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: p.phone || "" } });
     go("book");
@@ -686,7 +687,7 @@
       case "filter": state.filter = v; render(); break;
       case "salon": startBooking(v); break;
       case "rebook": startBooking(v); break;
-      case "salon-svc": if (SALON.status === "active") startBooking(SALON.id, v); else toast("الحجز متوقف مؤقتاً"); break;
+      case "salon-svc": if (Store.isLive(SALON)) startBooking(SALON.id, v); else toast("الحجز متوقف مؤقتاً"); break;
       case "home": go("home"); break;
       case "mine": go("mine"); break;
       case "profile": go("profile"); break;

@@ -53,6 +53,70 @@
     </div></nav>`;
   }
 
+  /* ---------- الاشتراك ---------- */
+  function subBanner(s) {
+    const st = Store.subState(s);
+    const msg = {
+      trial: `أنت في الفترة التجريبية المجانية، وتنتهي خلال ${Store.daysText(st.days)}. اشترك ليستمر الحجز بدون انقطاع.`,
+      expiring: `اشتراكك ينتهي خلال ${Store.daysText(st.days)}. جدّده الآن ليستمر الحجز.`,
+      grace: "انتهى اشتراكك، والحجز ما زال يعمل خلال فترة السماح. جدّد قبل أن يتوقف.",
+      expired: "انتهى اشتراكك، فتوقف الحجز واختفى صالونك من منصة عناياتي. جدّد لإعادة التفعيل.",
+      suspended: "حساب صالونك موقوف من إدارة عناياتي. تواصل معنا."
+    }[st.code];
+    if (!msg) return "";
+    const tone = st.code === "expired" || st.code === "suspended" ? "bad" : st.code === "trial" ? "info" : "warn";
+    return `<div class="sub-banner ${tone}"><p>${msg}</p>${st.code !== "suspended" ? `<button type="button" class="btn" data-act="go-sub">${st.pending ? "عرض طلب التجديد" : "إدارة الاشتراك"}</button>` : ""}</div>`;
+  }
+
+  function subCard(s) {
+    const st = Store.subState(s);
+    const b = Store.billing();
+    const sub = s.subscription;
+    const req = sub.requests[0];
+    const chosen = state.plan || (sub.plan === "yearly" ? "yearly" : "monthly");
+    const plan = (id, title, note) => `
+      <button type="button" role="radio" class="option with-check" data-act="plan" data-v="${id}" aria-checked="${chosen === id}">
+        <span class="check" style="border-radius:50%">${I.check}</span>
+        <span class="title">${title}</span>
+        <span class="price num">${money(b[id])}</span>
+        <span class="sub">${note}</span>
+      </button>`;
+    const history = sub.payments.slice().reverse().map((p) => `
+      <div class="row"><span>${fmtDate(p.at.slice(0, 10), { day: "numeric", month: "short", year: "numeric" })} · ${esc(Store.PLAN_NAMES[p.plan])}</span><span class="num">${money(p.amount)}</span></div>`).join("");
+    return `<section class="block" id="subscription">
+      <h2 class="section-title">اشتراكي</h2>
+      <div class="card sub-card">
+        <div class="sub-head">
+          <div><b>${esc(st.planName)}</b><span class="hint">${st.days >= 0 ? `ينتهي ${fmtDate(st.endsAt.slice(0, 10), { day: "numeric", month: "long", year: "numeric" })}` : `انتهى ${fmtDate(st.endsAt.slice(0, 10), { day: "numeric", month: "long" })}`}</span></div>
+          <span class="status sub-${st.code}">${esc(st.label)}</span>
+        </div>
+        <ul class="perks">
+          <li>تطبيق خاص باسم صالونك وهويته، ورابط حجز وبطاقة QR</li>
+          <li>لوحة إدارة الحجوزات والخدمات والفريق</li>
+          <li>الظهور في منصة عناياتي لعملاء جدد</li>
+        </ul>
+      </div>
+      ${req ? `<div class="card sub-card pending">
+          <b>طلب التجديد قيد المراجعة</b>
+          <p class="hint">${esc(Store.PLAN_NAMES[req.plan])} · <span class="num">${money(req.amount)}</span> · أُرسل ${fmtDate(req.at.slice(0, 10), { day: "numeric", month: "long" })}</p>
+          <p class="hint">يُفعَّل اشتراكك بعد أن تتأكد إدارة عناياتي من التحويل.</p>
+        </div>` : `<form class="card form" id="renew-form" novalidate>
+          <b>${st.plan === "trial" ? "اشترك الآن" : "جدّد اشتراكك"}</b>
+          <div class="options" role="radiogroup" aria-label="الباقة">
+            ${plan("monthly", "الباقة الشهرية", "تُجدَّد كل شهر")}
+            ${plan("yearly", "الباقة السنوية", `توفّر ${money(b.monthly * 12 - b.yearly)} في السنة`)}
+          </div>
+          <label>حوّل المبلغ إلى الحساب التالي</label>
+          <pre class="bank num" dir="auto">${esc(b.bank)}</pre>
+          <label for="rn-note">اسم المحوِّل أو رقم العملية</label>
+          <input id="rn-note" name="note" placeholder="يساعدنا على مطابقة التحويل">
+          <button type="submit" class="btn" style="margin-top:12px">أرسلت التحويل، فعّلوا اشتراكي</button>
+          <p class="demo-note">الدفع الإلكتروني المباشر يُضاف لاحقاً عبر بوابة دفع.</p>
+        </form>`}
+      ${history ? `<div class="card"><div class="row"><span><b>سجل المدفوعات</b></span><span></span></div>${history}</div>` : ""}
+    </section>`;
+  }
+
   /* ---------- الحجوزات ---------- */
   function viewBookings(s) {
     const today = isoDate(new Date());
@@ -93,6 +157,7 @@
 
     return `<section class="screen">
         ${header(s)}
+        ${subBanner(s)}
         <div class="stats three">
           <div class="stat"><b class="num">${todays.length}</b><span>حجوزات اليوم</span></div>
           <div class="stat"><b class="num">${upcoming.length}</b><span>القادمة</span></div>
@@ -190,6 +255,7 @@
       .map((h) => `<option value="${h}" ${h === sel ? "selected" : ""}>${h === 24 ? "12:00 ص" : hourLabel(h)}</option>`).join("")}</select>`;
     return `<section class="screen">
         ${header(s)}
+        ${subCard(s)}
         <h1 class="page-title">إعدادات الصالون</h1>
         <form class="card form" id="settings-form" novalidate>
           <b>الهوية</b>
@@ -248,6 +314,8 @@
       case "filter": state.filter = v; state.ask = null; render(); break;
       case "ask": state.ask = v || null; render(); break;
       case "edit": state.edit = v || null; state.ask = null; render(); { const f = $app.querySelector("form input"); if (f && v) f.focus(); } break;
+      case "go-sub": state.tab = "settings"; state.edit = null; render(); document.getElementById("subscription")?.scrollIntoView({ block: "start" }); break;
+      case "plan": state.plan = v; render(); document.getElementById("renew-form")?.scrollIntoView({ block: "nearest" }); break;
       case "copy": UI.copy(document.getElementById("share-link").value, document.getElementById("share-link")); break;
       case "b-done": Store.updateBooking(v, { status: "completed" }); state.ask = null; render(); UI.toast("سُجّل الحضور"); break;
       case "b-noshow": Store.updateBooking(v, { status: "noshow" }); state.ask = null; render(); UI.toast("سُجّل عدم الحضور"); break;
@@ -273,6 +341,12 @@
       state.loginError = ""; state.salonId = s.id; state.tab = "bookings";
       try { sessionStorage.setItem(SESSION, s.id); } catch (er) { /* لا شيء */ }
       render(); return;
+    }
+    if (f.id === "renew-form") {
+      const sub = salon().subscription;
+      Store.requestRenewal(state.salonId, { plan: state.plan || (sub.plan === "yearly" ? "yearly" : "monthly"), note: f.note.value.trim() });
+      render(); UI.toast("وصل طلبك، وسيُفعَّل الاشتراك بعد التأكد من التحويل");
+      return;
     }
     if (f.id === "service-form") {
       const name = f.name.value.trim(), price = Number(f.price.value), min = Number(f.min.value);
