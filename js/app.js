@@ -48,7 +48,8 @@
     paying: false,
     lastBooking: null,
     cancelAsk: null,
-    cust: { name: "", phone: "" }
+    cust: { name: "", phone: "" },
+    auth: { phone: "", name: "", code: "", sent: false, sms: "", error: "" }
   };
 
   /* ---------- التخزين المحلي ---------- */
@@ -77,7 +78,9 @@
   applyTheme(currentTheme());
 
   /* في وضع الصالون تظهر حجوزات هذا الصالون فقط */
-  const myBookings = () => loadBookings().filter((b) => !SALON || b.salonId === SALON.id);
+  /* الحساب: رقم جوال مؤكَّد برمز تحقق. المواعيد تظهر حسب هذا الرقم، سواء حجز العميل بنفسه أو حجز له الصالون */
+  const sessionPhone = () => { const p = loadProfile(); return p.verified && p.phone ? p.phone : ""; };
+  const myBookings = () => { const ph = sessionPhone(); return ph ? loadBookings().filter((b) => (!SALON || b.salonId === SALON.id) && b.customer && b.customer.phone === ph) : []; };
 
   /* ---------- أدوات ---------- */
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -376,20 +379,74 @@
           <span class="sub">${esc(p.note)}</span>
         </button>`).join("")}</div>
       <div><h3 class="section-title" style="font-size:var(--fs-md)">بياناتك</h3><p class="hint">يصل اسمك ورقمك للصالون ليتواصل معك عند الحاجة.</p></div>
-      <div class="card form">
+      ${sessionPhone() ? `<div class="card form">
+        <div class="verified-row"><span class="num" dir="ltr">${esc(sessionPhone())}</span><span class="ok-tag">رقم مؤكَّد ✓</span></div>
         <label for="cu-name">الاسم</label>
         <input id="cu-name" data-cust="name" type="text" autocomplete="name" value="${esc(state.cust.name)}" placeholder="مثال: عبدالعزيز">
-        <label for="cu-phone">رقم الجوال</label>
-        <input id="cu-phone" data-cust="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(state.cust.phone)}" placeholder="05XXXXXXXX">
-        <p class="field-error" id="cu-err" ${state.cust.phone && !validPhone(state.cust.phone) ? "" : "hidden"}>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
-      </div>
+      </div>` : authBlock("أكّد رقم جوالك لإكمال الحجز", true)}
       <p class="demo-note">نسخة تجريبية: لا يتم خصم أي مبلغ. يُربط الدفع لاحقاً ببوابة دفع (مثل Moyasar أو HyperPay).</p>`;
   }
 
   const normPhone = (v) => String(v || "").replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
   const validPhone = (v) => /^05\d{8}$/.test(normPhone(v));
+  /* تسجيل الدخول برمز تحقق (في الحجز وفي "حسابي") */
+  function smsBox(text) {
+    return `<div class="sms-sim" role="note"><div class="sms-head"><span>رسالة نصية · عناياتي</span><span class="sms-tag">محاكاة: تصل لجوالك</span></div><p>${esc(text)}</p></div>`;
+  }
+  function authBlock(title, askName) {
+    const a = state.auth;
+    if (!a.sent) {
+      return `<div class="card form auth">
+        <b>${title}</b>
+        <p class="hint">نرسل لك رمزاً من 4 أرقام برسالة نصية. إن سبق أن حجزت بالاتصال، ستجد حسابك ومواعيدك جاهزة.</p>
+        ${askName ? `<label for="au-name">الاسم</label><input id="au-name" data-auth="name" type="text" autocomplete="name" value="${esc(a.name)}" placeholder="مثال: عبدالعزيز">` : ""}
+        <label for="au-phone">رقم الجوال</label>
+        <input id="au-phone" data-auth="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(a.phone)}" placeholder="05XXXXXXXX">
+        ${a.error ? `<p class="field-error">${esc(a.error)}</p>` : ""}
+        <button type="button" class="btn" data-act="auth-send" style="margin-top:12px">أرسل رمز التحقق</button>
+      </div>`;
+    }
+    return `${smsBox(a.sms)}
+      <div class="card form auth">
+        <b>اكتب الرمز الذي وصلك</b>
+        <p class="hint">أُرسل إلى <span class="num" dir="ltr">${esc(a.phone)}</span>، وصالح 5 دقائق.</p>
+        <label for="au-code">رمز التحقق</label>
+        <input id="au-code" data-auth="code" class="otp-input num" inputmode="numeric" autocomplete="one-time-code" maxlength="4" dir="ltr" placeholder="••••" value="${esc(a.code)}">
+        ${a.error ? `<p class="field-error">${esc(a.error)}</p>` : ""}
+        <button type="button" class="btn" data-act="auth-verify" style="margin-top:12px">تأكيد</button>
+        <div class="row-actions"><button type="button" class="link" data-act="auth-send">إعادة إرسال</button><button type="button" class="link" data-act="auth-reset">تغيير الرقم</button></div>
+      </div>`;
+  }
+  function authSend() {
+    const a = state.auth;
+    a.phone = normPhone(a.phone);
+    if (!validPhone(a.phone)) { a.error = "اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05."; return; }
+    const r = Store.sendOtp(a.phone, "login");
+    if (!r.ok) { a.error = `انتظر ${r.wait} ثانية قبل إعادة الإرسال.`; return; }
+    a.sent = true; a.code = ""; a.error = "";
+    a.sms = `عناياتي: رمز الدخول ${r.code}. لا تشاركه مع أي أحد. صالح 5 دقائق.`;
+  }
+  function authVerify() {
+    const a = state.auth;
+    const res = Store.verifyOtp(a.phone, "login", a.code);
+    const msg = { wrong: "الرمز غير صحيح.", expired: "انتهت صلاحية الرمز. أعد الإرسال.", locked: "محاولات كثيرة. أعد إرسال رمز جديد.", missing: "أعد إرسال الرمز." }[res];
+    if (msg) { a.error = msg; return false; }
+    const existing = Store.customer(a.phone);
+    const c = Store.upsertCustomer({ phone: a.phone, name: a.name.trim(), via: "app" });
+    const p = loadProfile();
+    saveProfile({ ...p, phone: a.phone, verified: true, name: c.name || a.name.trim() || p.name });
+    state.cust = { name: c.name || a.name.trim() || p.name || "", phone: a.phone };
+    state.auth = newAuth();
+    if (existing && existing.createdVia === "salon") {
+      const from = DATA.salons.find((x) => x.id === existing.createdBy);
+      toast(`أهلاً ${existing.name || ""}! حسابك جاهز${from ? ` من ${from.name}` : ""}، وتجد مواعيدك في "مواعيدي".`);
+    } else toast(existing ? "أهلاً بعودتك" : "أُنشئ حسابك برقم مؤكَّد");
+    return true;
+  }
+  const newAuth = () => ({ phone: "", name: "", code: "", sent: false, sms: "", error: "" });
+
   function canNext() {
-    const custOk = state.cust.name.trim().length >= 2 && validPhone(state.cust.phone);
+    const custOk = !!sessionPhone() && state.cust.name.trim().length >= 2;
     return [state.services.length > 0, !!state.staffId, !!(state.date && state.time), !!state.payment && custOk && !state.paying][state.step];
   }
 
@@ -472,7 +529,9 @@
         ${topbar()}
         <div class="hello"><h1>مواعيدي</h1></div>
         ${list.length ? `<div class="bookings">${items}</div>`
-          : `<div class="empty">${I.cal}<p>لا توجد مواعيد بعد. ستظهر حجوزاتك هنا بعد تأكيدها.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="home">احجز موعدك الأول</button></div>`}
+          : sessionPhone()
+            ? `<div class="empty">${I.cal}<p>لا توجد مواعيد بعد. ستظهر حجوزاتك هنا، ومنها ما يحجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="home">احجز موعدك الأول</button></div>`
+            : `<div class="empty">${I.cal}<p>سجّل دخولك برقم جوالك لتظهر مواعيدك، ومنها ما حجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="profile">تسجيل الدخول</button></div>`}
       </section>${tabbar("mine")}`;
   }
 
@@ -525,8 +584,8 @@
         <label for="pf-name">الاسم</label>
         <input id="pf-name" name="name" type="text" autocomplete="name" value="${esc(p.name)}" placeholder="مثال: عبدالعزيز">
         <label for="pf-phone">رقم الجوال</label>
-        <input id="pf-phone" name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(p.phone)}" placeholder="05XXXXXXXX">
-        <p class="field-error" id="pf-phone-err" hidden>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
+        <p class="verified-row"><span class="num" dir="ltr">${esc(p.phone)}</span><span class="ok-tag">رقم مؤكَّد ✓</span></p>
+        <p class="hint">لتغيير الرقم سجّل الخروج وادخل بالرقم الجديد.</p>
         <label for="pf-email">البريد الإلكتروني (اختياري)</label>
         <input id="pf-email" name="email" type="email" dir="ltr" autocomplete="email" value="${esc(p.email)}" placeholder="name@example.com">
         <label for="pf-pref">الصوالين المفضلة</label>
@@ -537,18 +596,18 @@
       </form>` : `
       <div class="card">
         <div class="row"><span>الاسم</span><span>${p.name ? esc(p.name) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
-        <div class="row"><span>الجوال</span><span class="num" dir="ltr">${p.phone ? esc(p.phone) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
+        <div class="row"><span>الجوال</span><span><span class="num" dir="ltr">${esc(p.phone)}</span> <span class="ok-tag">✓</span></span></div>
         <div class="row"><span>البريد</span><span dir="ltr">${p.email ? esc(p.email) : '<span class="hint">—</span>'}</span></div>
         <div class="row"><span>الصوالين المفضلة</span><span>${prefLabel}</span></div>
         <div class="row"><span>عضو منذ</span><span>${since}</span></div>
       </div>
-      <button type="button" class="btn ghost wide" data-act="edit-profile">تعديل البيانات</button>`;
+      <div class="booking-actions"><button type="button" class="btn ghost" data-act="edit-profile">تعديل البيانات</button><button type="button" class="btn ghost" data-act="logout">تسجيل الخروج</button></div>`;
 
     return `<section class="screen">
         ${topbar()}
         <div class="profile-head">
           <span class="avatar lg" aria-hidden="true">${p.name ? esc(p.name.charAt(0)) : I.user}</span>
-          <div><h1>${p.name ? esc(p.name) : "حسابي"}</h1><p class="hint">${p.name ? `نقاط الولاء: <b class="num">${st.points}</b>` : "أضف اسمك ورقمك ليسهل على الصالون التواصل معك."}</p></div>
+          <div><h1>${p.name ? esc(p.name) : "حسابي"}</h1><p class="hint">${p.name ? `نقاط الولاء: <b class="num">${st.points}</b>` : (sessionPhone() ? "أضف اسمك ليعرفك الصالون." : "سجّل دخولك لتظهر مواعيدك ونقاطك.")}</p></div>
         </div>
 
         <div class="stats">
@@ -571,7 +630,7 @@
           <div class="row"><span>مواعيد ملغاة</span><span class="num">${st.cancelled}</span></div>
         </div>
 
-        <div class="block"><h2 class="section-title">بياناتي</h2>${info}</div>
+        <div class="block"><h2 class="section-title">بياناتي</h2>${sessionPhone() ? info : authBlock("سجّل الدخول برقم جوالك", false)}</div>
 
         <div class="block">
           <h2 class="section-title">المظهر</h2>
@@ -638,7 +697,7 @@
   function startBooking(id, serviceId) {
     if (!Store.isLive(Store.salon(id))) { toast("الحجز في هذا الصالون متوقف مؤقتاً"); return; }
     const p = loadProfile();
-    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: p.phone || "" } });
+    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: sessionPhone() }, auth: { ...newAuth(), name: p.name || "" } });
     go("book");
   }
 
@@ -660,11 +719,12 @@
         services: state.services.slice(), serviceNames: chosenServices().map((x) => x.name),
         date: state.date, time: state.time, minutes: totalMin(), total: totalPrice(),
         payment: state.payment, status: "confirmed", createdAt: new Date().toISOString(),
-        customer: { name: state.cust.name.trim(), phone: normPhone(state.cust.phone) }
+        customer: { name: state.cust.name.trim(), phone: sessionPhone() }
       };
       Store.addBooking(b);
+      Store.upsertCustomer({ phone: b.customer.phone, name: b.customer.name, via: "app", salonId: s.id });
       const p = loadProfile();
-      if (!p.name || !p.phone) saveProfile({ ...p, name: p.name || b.customer.name, phone: p.phone || b.customer.phone });
+      if (!p.name) saveProfile({ ...p, name: b.customer.name });
       state.paying = false; state.lastBooking = b;
       go("done");
     }, 900);
@@ -696,6 +756,10 @@
       case "theme": setTheme(v); render(); break;
       case "edit-profile": state.editProfile = true; render(); { const f = document.getElementById("pf-name"); if (f) f.focus(); } break;
       case "edit-cancel": state.editProfile = false; render(); break;
+      case "auth-send": authSend(); render(); document.getElementById(state.auth.sent ? "au-code" : "au-phone")?.focus(); break;
+      case "auth-verify": if (authVerify()) render(); else { render(); document.getElementById("au-code")?.focus(); } break;
+      case "auth-reset": state.auth = { ...newAuth(), phone: state.auth.phone, name: state.auth.name }; render(); break;
+      case "logout": { const p = loadProfile(); saveProfile({ ...p, verified: false }); state.editProfile = false; render(); toast("سُجّل خروجك"); break; }
       case "clear-ask": state.clearAsk = true; render(); break;
       case "clear-no": state.clearAsk = false; render(); break;
       case "clear-yes":
@@ -727,12 +791,20 @@
 
   /* بيانات العميل في خطوة الدفع */
   $app.addEventListener("input", (e) => {
+    const ak = e.target.dataset && e.target.dataset.auth;
+    if (ak) { state.auth[ak] = e.target.value; if (ak === "name") state.cust.name = e.target.value; return; }
     const k = e.target.dataset && e.target.dataset.cust;
     if (!k) return;
     state.cust[k] = e.target.value;
     const btn = $app.querySelector('[data-act="next"]');
     if (btn) btn.disabled = !canNext();
-    if (k === "phone") { const err = document.getElementById("cu-err"); const v = e.target.value; err.hidden = !v || normPhone(v).length < 10 || validPhone(v); }
+
+  });
+
+  $app.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.target.dataset || !e.target.dataset.auth) return;
+    e.preventDefault();
+    $app.querySelector(state.auth.sent ? '[data-act="auth-verify"]' : '[data-act="auth-send"]')?.click();
   });
 
   /* حفظ بيانات الحساب */
@@ -740,11 +812,8 @@
     if (e.target.id !== "profile-form") return;
     e.preventDefault();
     const f = e.target;
-    const phone = f.phone.value.replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-    const err = document.getElementById("pf-phone-err");
-    if (phone && !/^05\d{8}$/.test(phone)) { err.hidden = false; f.phone.setAttribute("aria-invalid", "true"); f.phone.focus(); return; }
     const p = loadProfile();
-    saveProfile({ ...p, name: f.name.value.trim(), phone, email: f.email.value.trim(), pref: f.pref.value });
+    saveProfile({ ...p, name: f.name.value.trim(), email: f.email.value.trim(), pref: f.pref.value });
     state.filter = f.pref.value;
     state.editProfile = false; render(); toast("تم حفظ بياناتك");
   });

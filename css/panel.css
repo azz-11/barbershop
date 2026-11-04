@@ -90,3 +90,12 @@
 .status.sub-trial { background: color-mix(in oklab, var(--brand) 14%, var(--surface)); color: var(--brand); }
 .status.sub-expiring, .status.sub-grace { background: color-mix(in oklab, #D98A2B 22%, var(--surface)); color: var(--ink); }
 .status.sub-expired, .status.sub-suspended { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); color: var(--danger); }
+
+/* الحجز الهاتفي */
+.steps.three { grid-template-columns: repeat(3, 1fr); }
+.cust-chip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+.cust-chip > div { display: grid; min-width: 0; }
+.cust-chip .avatar { width: 44px; height: 44px; font-size: 1rem; }
+.svc-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.src-tag { display: inline-block; padding: 0 8px; border-radius: 999px; background: color-mix(in oklab, var(--brand-accent) 22%, var(--surface)); color: var(--ink); font-size: var(--fs-xs); }
+.done-card .row:last-child { border-bottom: 0; }
