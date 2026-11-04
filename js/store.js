@@ -58,6 +58,16 @@ window.Store = (function () {
   function normalize(d) {
     d.billing = { ...DEFAULT_BILLING, ...(d.billing || {}) };
     d.customers = d.customers || [];
+    /* ترقية: الموقع والأرقام التجريبية من البيانات الأولية، وإزالة النجوم القديمة */
+    const base = window.ENAYATI_DATA.salons;
+    d.salons.forEach((s) => {
+      const src = base.find((x) => x.id === s.id);
+      delete s.rating; delete s.reviews;
+      if (!src) return;
+      if (!s.location && src.location) s.location = src.location;
+      if (!s.seed && src.seed) s.seed = src.seed;
+      s.staff.forEach((m) => { const sm = src.staff.find((x) => x.id === m.id); if (sm && m.seedCuts == null && sm.seedCuts != null) m.seedCuts = sm.seedCuts; });
+    });
     d.otps = d.otps || {};
     d.salons.forEach((s) => {
       if (!s.subscription) s.subscription = makeSub(s.id, s.createdAt, d.billing);
@@ -90,7 +100,7 @@ window.Store = (function () {
       if (raw && raw === cacheRaw) return cacheData;
       const d = JSON.parse(raw);
       if (d && d.version === 1) {
-        const needs = !d.billing || !d.customers || d.salons.some((s) => !s.subscription);
+        const needs = !d.billing || !d.customers || d.salons.some((s) => !s.subscription || "rating" in s);
         normalize(d);
         if (needs) { write(d); return d; }
         cacheRaw = raw; cacheData = d; return d;
@@ -118,6 +128,11 @@ window.Store = (function () {
     if (sub.plan === "trial") return { ...base, code: "trial", label: `تجربة · ${daysText(days)}`, live: true };
     if (days <= 5) return { ...base, code: "expiring", label: `ينتهي خلال ${daysText(days)}`, live: true };
     return { ...base, code: "active", label: "مشترك", live: true };
+  }
+  /* نسبة الرضا = (راضٍ جداً + راضٍ) ÷ كل التقييمات */
+  function satisfaction(r) {
+    const total = r.very + r.ok + r.no;
+    return { ratings: r, rated: total, pct: total ? Math.round(((r.very + r.ok) / total) * 100) : null };
   }
   function daysText(n) {
     n = Math.max(0, n);
@@ -227,6 +242,42 @@ window.Store = (function () {
         if (free) out.push({ time: `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, staff: free });
       }
       return out;
+    },
+
+    /* ---------- الزيارات والرضا ----------
+       الزيارة = حجز سجّله الصالون "مكتمل".
+       الرضا ثلاث درجات بعد كل زيارة: very (راضٍ جداً) · ok (راضٍ) · no (غير راضٍ)
+       ويقيّم العميل الصالون والمختص كلٌّ على حدة. */
+    VERDICTS: { very: "راضٍ جداً", ok: "راضٍ", no: "غير راضٍ" },
+    rateBooking(code, { salon, staff, note }) {
+      mutate((d) => { const b = d.bookings.find((x) => x.code === code); if (b && b.status === "completed" && !b.feedback) b.feedback = { salon, staff, note: note || "", at: new Date().toISOString() }; });
+    },
+    salonStats(s) {
+      const done = read().bookings.filter((b) => b.salonId === s.id && b.status === "completed");
+      const r = { very: 0, ok: 0, no: 0, ...((s.seed && s.seed.ratings) || {}) };
+      done.forEach((b) => { if (b.feedback && r[b.feedback.salon] != null) r[b.feedback.salon] += 1; });
+      return { visits: ((s.seed && s.seed.visits) || 0) + done.length, ...satisfaction(r) };
+    },
+    staffStats(s, staffId) {
+      const m = s.staff.find((x) => x.id === staffId) || {};
+      const done = read().bookings.filter((b) => b.salonId === s.id && b.staffId === staffId && b.status === "completed");
+      const r = { very: 0, ok: 0, no: 0 };
+      /* الأرقام التجريبية للمختص تتبع نسب صالونه */
+      if (m.seedCuts && s.seed && s.seed.ratings) { const t = s.seed.ratings, n = t.very + t.ok + t.no; ["very", "ok", "no"].forEach((k) => { r[k] = Math.round((t[k] / n) * m.seedCuts * 0.3); }); }
+      done.forEach((b) => { if (b.feedback && r[b.feedback.staff] != null) r[b.feedback.staff] += 1; });
+      return { cuts: (m.seedCuts || 0) + done.length, ...satisfaction(r) };
+    },
+    customerVisits(phone, salonId) {
+      return read().bookings.filter((b) => b.customer && b.customer.phone === phone && b.salonId === salonId && b.status === "completed").length;
+    },
+
+    /* المسافة بالكيلومتر بين نقطتين (معادلة هافرساين) */
+    distanceKm(a, b) {
+      if (!a || !b) return null;
+      const R = 6371, rad = (x) => (x * Math.PI) / 180;
+      const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
     },
 
     /* الحجوزات */

@@ -12,8 +12,9 @@ window.ENAYATI_DATA = {
       slogan: "حلاقتك بيد تعرفك",
       about: "صالون رجالي يجمع الحلاقة الكلاسيكية بالموس والمنشفة الساخنة مع لمسة عصرية. نهتم بالتفاصيل الصغيرة: التحديد، والنظافة، والقهوة وأنت تنتظر.",
       address: "الرياض، حي الياسمين، طريق الملك عبدالعزيز",
-      rating: 4.8,
-      reviews: 312,
+      location: { lat: 24.8235, lng: 46.642 },
+      /* أرقام تجريبية للعرض فقط (صالون وهمي) */
+      seed: { visits: 1240, ratings: { very: 268, ok: 38, no: 6 } },
       brand: { primary: "#0E4F4A", accent: "#B8893B" },
       hours: { open: 10, close: 23 },
       services: [
@@ -24,9 +25,9 @@ window.ENAYATI_DATA = {
         { id: "facial", name: "تنظيف بشرة", desc: "تقشير وقناع طين", min: 35, price: 75 }
       ],
       staff: [
-        { id: "a", name: "أبو فهد", role: "حلاق أول", years: 14 },
-        { id: "b", name: "سلمان", role: "مختص لحية", years: 7 },
-        { id: "c", name: "يوسف", role: "حلاق", years: 4 }
+        { id: "a", name: "أبو فهد", role: "حلاق أول", years: 14, seedCuts: 612 },
+        { id: "b", name: "سلمان", role: "مختص لحية", years: 7, seedCuts: 401 },
+        { id: "c", name: "يوسف", role: "حلاق", years: 4, seedCuts: 227 }
       ]
     },
     {
@@ -38,8 +39,9 @@ window.ENAYATI_DATA = {
       slogan: "القصة اللي تشبهك",
       about: "متخصصون في قصات التدرّج الحديثة وتحديد اللحية بدقة. فريق شاب يتابع أحدث الصيحات ويختار معك ما يناسب شكل وجهك.",
       address: "الرياض، حي النرجس، شارع أنس بن مالك",
-      rating: 4.6,
-      reviews: 188,
+      location: { lat: 24.878, lng: 46.656 },
+      /* أرقام تجريبية للعرض فقط (صالون وهمي) */
+      seed: { visits: 760, ratings: { very: 141, ok: 36, no: 11 } },
       brand: { primary: "#1F2A44", accent: "#C4573A" },
       hours: { open: 13, close: 24 },
       services: [
@@ -49,8 +51,8 @@ window.ENAYATI_DATA = {
         { id: "color", name: "صبغة رجالية", desc: "تغطية الشيب", min: 40, price: 85 }
       ],
       staff: [
-        { id: "a", name: "ماجد", role: "مختص تدرّج", years: 9 },
-        { id: "b", name: "عمر", role: "حلاق", years: 5 }
+        { id: "a", name: "ماجد", role: "مختص تدرّج", years: 9, seedCuts: 455 },
+        { id: "b", name: "عمر", role: "حلاق", years: 5, seedCuts: 305 }
       ]
     },
     {
@@ -62,8 +64,9 @@ window.ENAYATI_DATA = {
       slogan: "جمالك يبدأ من هنا",
       about: "صالون نسائي متكامل للشعر والأظافر ومكياج المناسبات، بأيدي مختصات بخبرة طويلة ومنتجات عالية الجودة.",
       address: "الرياض، حي الملقا، طريق الأمير محمد بن سعد",
-      rating: 4.9,
-      reviews: 421,
+      location: { lat: 24.804, lng: 46.6 },
+      /* أرقام تجريبية للعرض فقط (صالون وهمي) */
+      seed: { visits: 1630, ratings: { very: 372, ok: 41, no: 8 } },
       brand: { primary: "#6B2D4A", accent: "#C99A6B" },
       hours: { open: 11, close: 22 },
       services: [
@@ -74,9 +77,9 @@ window.ENAYATI_DATA = {
         { id: "makeup", name: "مكياج سهرة", desc: "مكياج كامل مع رموش", min: 60, price: 300 }
       ],
       staff: [
-        { id: "a", name: "مها", role: "مختصة شعر", years: 12 },
-        { id: "b", name: "نوف", role: "مختصة مكياج", years: 6 },
-        { id: "c", name: "ريم", role: "مختصة أظافر", years: 5 }
+        { id: "a", name: "مها", role: "مختصة شعر", years: 12, seedCuts: 820 },
+        { id: "b", name: "نوف", role: "مختصة مكياج", years: 6, seedCuts: 480 },
+        { id: "c", name: "ريم", role: "مختصة أظافر", years: 5, seedCuts: 330 }
       ]
     },
     {
@@ -88,8 +91,9 @@ window.ENAYATI_DATA = {
       slogan: "عناية تليق بك",
       about: "ستوديو هادئ للعناية بالبشرة والشعر، بجلسات مخصصة حسب نوع بشرتك وشعرك، في أجواء مريحة وخاصة.",
       address: "الرياض، حي الروضة، شارع خالد بن الوليد",
-      rating: 4.7,
-      reviews: 256,
+      location: { lat: 24.735, lng: 46.765 },
+      /* أرقام تجريبية للعرض فقط (صالون وهمي) */
+      seed: { visits: 905, ratings: { very: 201, ok: 44, no: 11 } },
       brand: { primary: "#2F4A3A", accent: "#D1A04C" },
       hours: { open: 10, close: 21 },
       services: [
@@ -99,8 +103,8 @@ window.ENAYATI_DATA = {
         { id: "brows", name: "رسم حواجب", desc: "تحديد بالخيط", min: 20, price: 50 }
       ],
       staff: [
-        { id: "a", name: "لولوة", role: "مختصة بشرة", years: 10 },
-        { id: "b", name: "سارة", role: "مختصة شعر", years: 8 }
+        { id: "a", name: "لولوة", role: "مختصة بشرة", years: 10, seedCuts: 530 },
+        { id: "b", name: "سارة", role: "مختصة شعر", years: 8, seedCuts: 375 }
       ]
     },
     {

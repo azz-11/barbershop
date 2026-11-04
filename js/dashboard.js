@@ -2,6 +2,7 @@
    يدخل صاحب الصالون ويدير بيانات صالونه فقط: الحجوزات، الخدمات، الفريق، الإعدادات. */
 (function () {
   "use strict";
+  const yrs = (n) => (n === 1 ? "سنة" : n === 2 ? "سنتان" : n <= 10 ? `<span class="num">${n}</span> سنوات` : `<span class="num">${n}</span> سنة`);
   const { esc, money, fromMin, toMin, fmtTime, hourLabel, isoDate, fmtDate, initials, DAYS, bookingState, I } = UI;
   const SESSION = "enayati.owner";
   const $app = document.getElementById("app");
@@ -228,6 +229,19 @@
     nb.error = ""; return true;
   }
 
+  /* ملخص رضا العملاء عن الصالون */
+  function satCard(s) {
+    const st = Store.salonStats(s); const r = st.ratings;
+    const bar = (k, label) => { const w = st.rated ? Math.round((r[k] / st.rated) * 100) : 0;
+      return `<div class="sat-bar"><span>${label}</span><div class="bar"><span class="b-${k}" style="width:${w}%"></span></div><span class="num">${r[k]}</span></div>`; };
+    return `<div class="card sub-card">
+      <div class="sub-head"><div><b>رضا العملاء</b><span class="hint"><span class="num">${st.visits.toLocaleString("en-US")}</span> زيارة · <span class="num">${st.rated}</span> تقييم</span></div>
+        <span class="sat-big num">${st.pct != null ? st.pct + "٪" : "—"}</span></div>
+      ${bar("very", "راضٍ جداً")}${bar("ok", "راضٍ")}${bar("no", "غير راضٍ")}
+      <p class="hint">يقيّم العميل الصالون والمختص بعد كل زيارة تسجّلها "مكتملة".</p>
+    </div>`;
+  }
+
   /* ---------- الحجوزات ---------- */
   function viewBookings(s) {
     const today = isoDate(new Date());
@@ -262,6 +276,7 @@
           ${b.customer?.phone ? `<span class="num" dir="ltr">${esc(b.customer.phone)}</span>` : ""}
         </div>
         <p class="hint">${b.source === "phone" ? '<span class="src-tag">حجز هاتفي</span> ' : ""}${b.serviceNames.map(esc).join("، ")} · ${esc(b.staffName)} · <span class="num">${money(b.total)}</span> · ${b.payment === "cash" ? "دفع في الصالون" : "مدفوع"}</p>
+        ${b.feedback ? `<div class="fb fb-${b.feedback.salon}"><span>تقييم العميل: الصالون <b>${Store.VERDICTS[b.feedback.salon]}</b> · ${esc(b.staffName)} <b>${Store.VERDICTS[b.feedback.staff]}</b></span>${b.feedback.note ? `<span>"${esc(b.feedback.note)}"</span>` : ""}</div>` : ""}
         ${actions}
       </article>`;
     }).join("");
@@ -349,12 +364,14 @@
              <button type="button" class="btn danger" data-act="st-del" data-v="${esc(m.id)}">نعم، أزل</button><button type="button" class="btn ghost" data-act="ask" data-v="">تراجع</button></div></div>`
         : `<div class="admin-row">
             <span class="avatar" aria-hidden="true">${esc(m.name.charAt(0))}</span>
-            <div class="admin-row-main"><b>${esc(m.name)}</b><span class="hint">${esc(m.role || "")}${m.years ? ` · <span class="num">${m.years}</span> سنة` : ""} · حجوزات اليوم: <span class="num">${n}</span></span></div>
+            <div class="admin-row-main"><b>${esc(m.name)}</b><span class="hint">${esc(m.role || "")}${m.years ? ` · ${yrs(m.years)}` : ""} · حجوزات اليوم: <span class="num">${n}</span></span>
+              <span class="hint">${(() => { const st = Store.staffStats(s, m.id); return `<b class="num">${st.cuts.toLocaleString("en-US")}</b> ${s.type === "men" ? "حلاقة" : "خدمة"} مكتملة${st.pct != null ? ` · رضا <b class="num">${st.pct}٪</b> من <span class="num">${st.rated}</span> تقييم` : " · لا تقييمات بعد"}`; })()}</span></div>
             <div class="row-actions"><button type="button" class="link" data-act="edit" data-v="${esc(m.id)}">تعديل</button><button type="button" class="link danger-text" data-act="ask" data-v="st:${esc(m.id)}">إزالة</button></div>
           </div>`;
     }).join("");
     return `<section class="screen">
         ${header(s)}
+        ${satCard(s)}
         <div class="block-head"><h1 class="page-title">${s.type === "men" ? "فريق الحلاقين" : "فريق المختصات"}</h1><span class="hint num">${s.staff.length}</span></div>
         ${state.edit === "new" ? staffForm(null) : `<button type="button" class="btn wide add-btn" data-act="edit" data-v="new">${I.plus} إضافة ${s.type === "men" ? "حلاق" : "مختصة"}</button>`}
         <div class="admin-list">${rows || `<div class="empty"><p>أضف فريقك ليختار العملاء من يخدمهم.</p></div>`}</div>
@@ -385,6 +402,13 @@
           <select id="se-type" name="type"><option value="men" ${s.type === "men" ? "selected" : ""}>رجالي</option><option value="women" ${s.type === "women" ? "selected" : ""}>نسائي</option></select>
           <label for="se-area">الحي</label><input id="se-area" name="area" value="${esc(s.area || "")}">
           <label for="se-address">العنوان الكامل</label><input id="se-address" name="address" value="${esc(s.address || "")}">
+          <label>الموقع على الخريطة (لحساب المسافة للعملاء)</label>
+          <div class="two">
+            <div><input id="se-lat" name="lat" inputmode="decimal" dir="ltr" placeholder="خط العرض 24.71" value="${s.location ? s.location.lat : ""}" aria-label="خط العرض"></div>
+            <div><input id="se-lng" name="lng" inputmode="decimal" dir="ltr" placeholder="خط الطول 46.67" value="${s.location ? s.location.lng : ""}" aria-label="خط الطول"></div>
+          </div>
+          <button type="button" class="btn ghost" data-act="here" style="margin-top:6px">استخدم موقعي الحالي (وأنا في الصالون)</button>
+          ${s.location ? `<a class="hint" href="https://www.google.com/maps/search/?api=1&query=${s.location.lat},${s.location.lng}" target="_blank" rel="noopener">تحقق من الموقع على الخرائط</a>` : ""}
           <label for="se-about">نبذة عن الصالون</label><textarea id="se-about" name="about" rows="3">${esc(s.about || "")}</textarea>
 
           <b class="form-sep">ساعات العمل</b>
@@ -433,6 +457,14 @@
       case "nb-close": state.nb = null; render(); break;
       case "nb-back": state.nb.step = "phone"; state.nb.error = ""; render(); break;
       case "nb-resend": nbSendCode(salon()); render(); break;
+      case "here":
+        if (!("geolocation" in navigator)) { UI.toast("الجهاز لا يدعم تحديد الموقع"); break; }
+        navigator.geolocation.getCurrentPosition((pos) => {
+          document.getElementById("se-lat").value = pos.coords.latitude.toFixed(5);
+          document.getElementById("se-lng").value = pos.coords.longitude.toFixed(5);
+          UI.toast("حُدد الموقع. اضغط \"حفظ الإعدادات\" لاعتماده");
+        }, () => UI.toast("لم نتمكن من تحديد الموقع. اسمح للمتصفح بالوصول إليه."), { timeout: 10000 });
+        break;
       case "copy": UI.copy(document.getElementById("share-link").value, document.getElementById("share-link")); break;
       case "b-done": Store.updateBooking(v, { status: "completed" }); state.ask = null; render(); UI.toast("سُجّل الحضور"); break;
       case "b-noshow": Store.updateBooking(v, { status: "noshow" }); state.ask = null; render(); UI.toast("سُجّل عدم الحضور"); break;
@@ -541,6 +573,9 @@
       const open = Number(f["se-open"].value), close = Number(f["se-close"].value);
       if (!f.name.value.trim()) { err.textContent = "اكتب اسم الصالون."; err.hidden = false; return; }
       if (close <= open) { err.textContent = "وقت الإغلاق يجب أن يكون بعد وقت الفتح."; err.hidden = false; return; }
+      const lat = parseFloat(f.lat.value), lng = parseFloat(f.lng.value);
+      const loc = f.lat.value.trim() === "" && f.lng.value.trim() === "" ? null : { lat, lng };
+      if (loc && !(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) { err.textContent = "إحداثيات الموقع غير صحيحة."; err.hidden = false; return; }
       if (f.pass.value && f.pass.value.length < 4) { err.textContent = "كلمة المرور 4 أحرف على الأقل."; err.hidden = false; return; }
       update((s) => {
         Object.assign(s, {
@@ -548,7 +583,8 @@
           type: f.type.value, area: f.area.value.trim(), address: f.address.value.trim(), about: f.about.value.trim(),
           brand: { primary: f.primary.value, accent: f.accent.value },
           hours: { open, close },
-          closedDays: [...f.querySelectorAll('input[name="closed"]:checked')].map((x) => Number(x.value))
+          closedDays: [...f.querySelectorAll('input[name="closed"]:checked')].map((x) => Number(x.value)),
+          location: loc
         });
         if (f.pass.value) s.password = f.pass.value;
       }, "حُفظت الإعدادات، وظهرت للعملاء");

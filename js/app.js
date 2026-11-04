@@ -1,6 +1,7 @@
 /* عناياتي — منطق التطبيق (بدون مكتبات) */
 (function () {
   "use strict";
+  const yrs = (n) => (n === 1 ? "سنة" : n === 2 ? "سنتان" : n <= 10 ? `<span class="num">${n}</span> سنوات` : `<span class="num">${n}</span> سنة`);
 
   /* الصوالين والحجوزات تأتي من طبقة البيانات (js/store.js) */
   const DATA = Object.assign({}, window.ENAYATI_DATA, { salons: Store.salons() });
@@ -25,6 +26,11 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    smile: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
+    fVery: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7.5 13.5c1 2 2.6 3 4.5 3s3.5-1 4.5-3z" fill="currentColor"/><path d="M8.5 9.5h.01M15.5 9.5h.01"/></svg>',
+    fOk: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
+    fNo: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 16c.9-1 2.1-1.5 3.5-1.5s2.6.5 3.5 1.5M9 9.5h.01M15 9.5h.01"/></svg>',
     star: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.3 5.5 22l1.7-7.4L1.5 9.6 9 8.9z"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -149,7 +155,8 @@
   /* ---------- الشاشات ---------- */
   function viewHome() {
     if (SALON) return viewSalonHome(SALON);
-    const list = DATA.salons.filter((s) => Store.isLive(s) && s.services.length && !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    let list = DATA.salons.filter((s) => Store.isLive(s) && s.services.length && !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    if (state.sortNear && state.here) list = list.slice().sort((a, b) => (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
@@ -159,7 +166,7 @@
           <h3>${esc(s.name)}</h3>
           <p>${esc(s.tagline)}</p>
           <span class="meta">
-            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews})</span>` : ""}
+            ${statsLine(s, true)}
             ${s.area ? `<span>${esc(s.area)}</span>` : ""}
             <span class="num">${fmtTime(fromMin(s.hours.open * 60))} – ${fmtTime(fromMin(s.hours.close * 60))}</span>
           </span>
@@ -176,7 +183,8 @@
         <div class="hello"><p class="greet">${greet}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}</p><h1>أناقتك على موعد</h1></div>
         ${nextCard}
         <div class="block">
-          <h2 class="section-title">الصوالين</h2>
+          <div class="block-head"><h2 class="section-title">الصوالين</h2>
+            <button type="button" class="near-btn" data-act="near" aria-pressed="${!!(state.sortNear && state.here)}">${I.pin} ${state.locating ? "جاري تحديد موقعك…" : "الأقرب إليّ"}</button></div>
           <div class="segments" role="group" aria-label="نوع الصالون">${seg}</div>
           <div class="salons">${cards}</div>
         </div>
@@ -195,6 +203,36 @@
       <div class="options" role="group" aria-label="${esc(g.name || label)}">${g.items.map(item).join("")}</div>`).join("");
   }
   const svcSub = (sv) => `${sv.desc ? `${esc(sv.desc)} · ` : ""}<span class="num">${fmtDuration(sv.min)}</span>`;
+
+  /* ---------- الموقع والمسافة ---------- */
+  const HERE_KEY = "enayati.here";
+  const distOf = (s) => (state.here && s.location ? Store.distanceKm(state.here, s.location) : null);
+  const fmtKm = (km) => (km < 1 ? `${Math.max(50, Math.round(km * 1000 / 50) * 50)} م` : `${km < 10 ? km.toFixed(1) : Math.round(km)} كم`);
+  const n0 = (n) => Number(n).toLocaleString("en-US");
+  function locate(done) {
+    if (!("geolocation" in navigator)) { toast("جهازك لا يدعم تحديد الموقع"); return; }
+    state.locating = true; render();
+    navigator.geolocation.getCurrentPosition((pos) => {
+      state.here = { lat: pos.coords.latitude, lng: pos.coords.longitude, at: Date.now() };
+      setItem(HERE_KEY, state.here); state.locating = false; if (done) done(); render();
+    }, () => { state.locating = false; render(); toast("لم نتمكن من معرفة موقعك. فعّل خدمة الموقع واسمح للتطبيق بها."); },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60000 });
+  }
+  /* سطر الأرقام: الرضا والزيارات والمسافة */
+  function statsLine(s, withDistance) {
+    const st = Store.salonStats(s);
+    const km = withDistance ? distOf(s) : null;
+    return `${st.pct != null ? `<span class="sat"><b class="num">${I.smile} ${st.pct}٪</b> راضون</span>` : ""}
+      ${st.visits ? `<span><b class="num">${n0(st.visits)}</b> زيارة</span>` : ""}
+      ${km != null ? `<span class="dist">${I.pin} <b class="num">${fmtKm(km)}</b></span>` : ""}`;
+  }
+
+  function staffLine(s, id) {
+    const st = Store.staffStats(s, id);
+    if (!st.cuts && st.pct == null) return "";
+    const noun = s.type === "men" ? "حلاقة" : "خدمة";
+    return `<span class="staff-stats">${st.cuts ? `<b class="num">${n0(st.cuts)}</b> ${noun}` : ""}${st.pct != null ? ` · <b class="num">${st.pct}٪</b> رضا` : ""}</span>`;
+  }
 
   function nextVisitCard() {
     const next = upcomingBookings()[0];
@@ -222,7 +260,9 @@
     const p = loadProfile();
     const h = new Date().getHours();
     const greet = `${h < 12 ? "صباح الخير" : "مساء الخير"}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}`;
-    const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.name + " " + s.address);
+    const maps = "https://www.google.com/maps/search/?api=1&query=" + (s.location ? `${s.location.lat},${s.location.lng}` : encodeURIComponent(s.name + " " + s.address));
+    const km = distOf(s);
+    const mine = sessionPhone() ? Store.customerVisits(sessionPhone(), s.id) : 0;
     return `<section class="screen">
         ${topbar()}
         <div class="salon-hero">
@@ -233,7 +273,10 @@
             <p class="slogan">${esc(s.slogan)}</p>
           </div>
           <div class="hero-meta">
-            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>` : ""}
+            ${statsLine(s, false)}
+            ${s.location ? (km != null ? `<span class="dist">${I.pin} يبعد عنك <b class="num">${fmtKm(km)}</b></span>`
+              : `<button type="button" class="dist-btn" data-act="near-one">${I.pin} ${state.locating ? "جاري التحديد…" : "كم يبعد عني؟"}</button>`) : ""}
+            ${mine ? `<span>زرته <b class="num">${mine}</b> ${mine === 1 ? "مرة" : mine === 2 ? "مرتين" : "مرات"}</span>` : ""}
             <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
           </div>
           ${Store.isLive(s) && s.services.length
@@ -259,7 +302,8 @@
             <div class="member">
               <span class="avatar" aria-hidden="true">${esc(m.name.charAt(0))}</span>
               <span class="name">${esc(m.name)}</span>
-              <span class="role">${esc(m.role)}${m.years ? ` · <span class="num">${m.years}</span> سنة` : ""}</span>
+              <span class="role">${esc(m.role)}${m.years ? ` · ${yrs(m.years)}` : ""}</span>
+              ${staffLine(s, m.id)}
             </div>`).join("")}</div>
         </div>
 
@@ -330,7 +374,8 @@
         <button type="button" role="radio" class="person" data-act="staff" data-v="${p.id}" aria-checked="${state.staffId === p.id}">
           <span class="avatar" aria-hidden="true">${p.id === "any" ? "✦" : esc(p.name.charAt(0))}</span>
           <span class="name">${esc(p.name)}</span>
-          <span class="role">${esc(p.role)}${p.years ? ` · <span class="num">${p.years}</span> سنة خبرة` : ""}</span>
+          <span class="role">${esc(p.role)}${p.years ? ` · ${yrs(p.years)} خبرة` : ""}</span>
+          ${p.id === "any" ? "" : staffLine(s, p.id)}
         </button>`).join("")}</div>`;
   }
 
@@ -503,6 +548,25 @@
     return end < new Date() ? ["past", "منتهٍ"] : ["upcoming", "قادم"];
   }
 
+  /* "كيف كانت زيارتك؟" بثلاث درجات للصالون وللمختص */
+  function rateBox(b, s) {
+    const V = Store.VERDICTS;
+    if (b.feedback) {
+      return `<div class="rated"><span>تقييمك للصالون: <b>${V[b.feedback.salon]}</b></span><span>لـ${esc(b.staffName)}: <b>${V[b.feedback.staff]}</b></span>${b.feedback.note ? `<span class="hint">"${esc(b.feedback.note)}"</span>` : ""}</div>`;
+    }
+    const r = state.rate && state.rate.code === b.code ? state.rate : { code: b.code, salon: null, staff: null, note: "" };
+    const row = (key, label) => `<div class="verdict-row"><span>${label}</span><div class="verdicts" role="radiogroup" aria-label="${label}">
+      ${[["very", I.fVery], ["ok", I.fOk], ["no", I.fNo]].map(([v, ic]) => `<button type="button" role="radio" class="verdict v-${v}" data-act="rate" data-v="${b.code}|${key}|${v}" aria-checked="${r[key] === v}">${ic}<span>${V[v]}</span></button>`).join("")}
+    </div></div>`;
+    return `<div class="rate-box">
+      <b>كيف كانت زيارتك؟</b>
+      ${row("salon", esc(s.name))}
+      ${row("staff", esc(b.staffName))}
+      <input type="text" class="rate-note" data-rate-note="${b.code}" placeholder="ملاحظة للصالون (اختياري)" value="${esc(r.note)}">
+      <button type="button" class="btn" data-act="rate-send" data-v="${b.code}" ${r.salon && r.staff ? "" : "disabled"}>إرسال التقييم</button>
+    </div>`;
+  }
+
   function viewMine() {
     const list = myBookings().slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const items = list.map((b) => {
@@ -516,6 +580,7 @@
         </div>
         <div class="booking-when">${I.cal}<span>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></span></div>
         <div class="meta"><span>رقم الحجز <b class="num" style="direction:ltr;display:inline-block">${b.code}</b></span><span class="num">${money(b.total)}</span></div>
+        ${b.status === "completed" ? rateBox(b, s) : ""}
         ${cls === "upcoming" ? (asking
           ? `<div class="confirm-box"><p>هل تريد إلغاء هذا الموعد؟</p><div class="booking-actions">
                <button type="button" class="btn danger" data-act="cancel-yes" data-v="${b.code}">نعم، ألغِ الموعد</button>
@@ -756,6 +821,23 @@
       case "theme": setTheme(v); render(); break;
       case "edit-profile": state.editProfile = true; render(); { const f = document.getElementById("pf-name"); if (f) f.focus(); } break;
       case "edit-cancel": state.editProfile = false; render(); break;
+      case "near":
+        if (state.sortNear && state.here) { state.sortNear = false; render(); }
+        else if (state.here && Date.now() - (state.here.at || 0) < 10 * 60000) { state.sortNear = true; render(); }
+        else locate(() => { state.sortNear = true; });
+        break;
+      case "near-one": locate(); break;
+      case "rate": {
+        const [code, key, val] = v.split("|");
+        if (!state.rate || state.rate.code !== code) state.rate = { code, salon: null, staff: null, note: "" };
+        state.rate[key] = val; render(); break;
+      }
+      case "rate-send": {
+        const r = state.rate;
+        if (!r || r.code !== v || !r.salon || !r.staff) return;
+        Store.rateBooking(v, { salon: r.salon, staff: r.staff, note: r.note.trim() });
+        state.rate = null; render(); toast("شكراً! وصل تقييمك للصالون"); break;
+      }
       case "auth-send": authSend(); render(); document.getElementById(state.auth.sent ? "au-code" : "au-phone")?.focus(); break;
       case "auth-verify": if (authVerify()) render(); else { render(); document.getElementById("au-code")?.focus(); } break;
       case "auth-reset": state.auth = { ...newAuth(), phone: state.auth.phone, name: state.auth.name }; render(); break;
@@ -791,6 +873,11 @@
 
   /* بيانات العميل في خطوة الدفع */
   $app.addEventListener("input", (e) => {
+    if (e.target.dataset && e.target.dataset.rateNote) {
+      const code = e.target.dataset.rateNote;
+      if (!state.rate || state.rate.code !== code) state.rate = { code, salon: null, staff: null, note: "" };
+      state.rate.note = e.target.value; return;
+    }
     const ak = e.target.dataset && e.target.dataset.auth;
     if (ak) { state.auth[ak] = e.target.value; if (ak === "name") state.cust.name = e.target.value; return; }
     const k = e.target.dataset && e.target.dataset.cust;
@@ -847,6 +934,7 @@
     if (SALON) Object.assign(SALON, Store.salon(SALON.id) || {});
     if (state.view !== "splash" && state.view !== "book") render();
   });
+  state.here = getItem(HERE_KEY, null);
   state.filter = loadProfile().pref || "all";
   state.view = "splash";
   render();

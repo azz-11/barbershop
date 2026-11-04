@@ -85,6 +85,7 @@
           </div>
         </div>
         <div class="mini-stats">
+          ${(() => { const ss = Store.salonStats(s); return `<span>رضا <b class="num">${ss.pct != null ? ss.pct + "٪" : "—"}</b></span><span><b class="num">${ss.visits.toLocaleString("en-US")}</b> زيارة</span>`; })()}
           <span><b class="num">${st.total}</b> حجز</span>
           <span><b class="num">${st.upcoming}</b> قادم</span>
           <span><b class="num">${st.done}</b> مكتمل</span>
