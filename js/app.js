@@ -1,6 +1,7 @@
 /* عناياتي — منطق التطبيق (بدون مكتبات) */
 (function () {
   "use strict";
+  const yrs = (n) => (n === 1 ? "سنة" : n === 2 ? "سنتان" : n <= 10 ? `<span class="num">${n}</span> سنوات` : `<span class="num">${n}</span> سنة`);
 
   /* الصوالين والحجوزات تأتي من طبقة البيانات (js/store.js) */
   const DATA = Object.assign({}, window.ENAYATI_DATA, { salons: Store.salons() });
@@ -25,6 +26,11 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    smile: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
+    fVery: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7.5 13.5c1 2 2.6 3 4.5 3s3.5-1 4.5-3z" fill="currentColor"/><path d="M8.5 9.5h.01M15.5 9.5h.01"/></svg>',
+    fOk: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
+    fNo: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 16c.9-1 2.1-1.5 3.5-1.5s2.6.5 3.5 1.5M9 9.5h.01M15 9.5h.01"/></svg>',
     star: '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.9 7.5.7-5.7 5 1.7 7.4L12 18.3 5.5 22l1.7-7.4L1.5 9.6 9 8.9z"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -48,7 +54,8 @@
     paying: false,
     lastBooking: null,
     cancelAsk: null,
-    cust: { name: "", phone: "" }
+    cust: { name: "", phone: "" },
+    auth: { phone: "", name: "", code: "", sent: false, sms: "", error: "" }
   };
 
   /* ---------- التخزين المحلي ---------- */
@@ -77,7 +84,9 @@
   applyTheme(currentTheme());
 
   /* في وضع الصالون تظهر حجوزات هذا الصالون فقط */
-  const myBookings = () => loadBookings().filter((b) => !SALON || b.salonId === SALON.id);
+  /* الحساب: رقم جوال مؤكَّد برمز تحقق. المواعيد تظهر حسب هذا الرقم، سواء حجز العميل بنفسه أو حجز له الصالون */
+  const sessionPhone = () => { const p = loadProfile(); return p.verified && p.phone ? p.phone : ""; };
+  const myBookings = () => { const ph = sessionPhone(); return ph ? loadBookings().filter((b) => (!SALON || b.salonId === SALON.id) && b.customer && b.customer.phone === ph) : []; };
 
   /* ---------- أدوات ---------- */
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -146,7 +155,8 @@
   /* ---------- الشاشات ---------- */
   function viewHome() {
     if (SALON) return viewSalonHome(SALON);
-    const list = DATA.salons.filter((s) => Store.isLive(s) && s.services.length && !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    let list = DATA.salons.filter((s) => Store.isLive(s) && s.services.length && !s.unlisted && (state.filter === "all" || s.type === state.filter));
+    if (state.sortNear && state.here) list = list.slice().sort((a, b) => (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
@@ -156,7 +166,7 @@
           <h3>${esc(s.name)}</h3>
           <p>${esc(s.tagline)}</p>
           <span class="meta">
-            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews})</span>` : ""}
+            ${statsLine(s, true)}
             ${s.area ? `<span>${esc(s.area)}</span>` : ""}
             <span class="num">${fmtTime(fromMin(s.hours.open * 60))} – ${fmtTime(fromMin(s.hours.close * 60))}</span>
           </span>
@@ -173,7 +183,8 @@
         <div class="hello"><p class="greet">${greet}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}</p><h1>أناقتك على موعد</h1></div>
         ${nextCard}
         <div class="block">
-          <h2 class="section-title">الصوالين</h2>
+          <div class="block-head"><h2 class="section-title">الصوالين</h2>
+            <button type="button" class="near-btn" data-act="near" aria-pressed="${!!(state.sortNear && state.here)}">${I.pin} ${state.locating ? "جاري تحديد موقعك…" : "الأقرب إليّ"}</button></div>
           <div class="segments" role="group" aria-label="نوع الصالون">${seg}</div>
           <div class="salons">${cards}</div>
         </div>
@@ -192,6 +203,36 @@
       <div class="options" role="group" aria-label="${esc(g.name || label)}">${g.items.map(item).join("")}</div>`).join("");
   }
   const svcSub = (sv) => `${sv.desc ? `${esc(sv.desc)} · ` : ""}<span class="num">${fmtDuration(sv.min)}</span>`;
+
+  /* ---------- الموقع والمسافة ---------- */
+  const HERE_KEY = "enayati.here";
+  const distOf = (s) => (state.here && s.location ? Store.distanceKm(state.here, s.location) : null);
+  const fmtKm = (km) => (km < 1 ? `${Math.max(50, Math.round(km * 1000 / 50) * 50)} م` : `${km < 10 ? km.toFixed(1) : Math.round(km)} كم`);
+  const n0 = (n) => Number(n).toLocaleString("en-US");
+  function locate(done) {
+    if (!("geolocation" in navigator)) { toast("جهازك لا يدعم تحديد الموقع"); return; }
+    state.locating = true; render();
+    navigator.geolocation.getCurrentPosition((pos) => {
+      state.here = { lat: pos.coords.latitude, lng: pos.coords.longitude, at: Date.now() };
+      setItem(HERE_KEY, state.here); state.locating = false; if (done) done(); render();
+    }, () => { state.locating = false; render(); toast("لم نتمكن من معرفة موقعك. فعّل خدمة الموقع واسمح للتطبيق بها."); },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 10 * 60000 });
+  }
+  /* سطر الأرقام: الرضا والزيارات والمسافة */
+  function statsLine(s, withDistance) {
+    const st = Store.salonStats(s);
+    const km = withDistance ? distOf(s) : null;
+    return `${st.pct != null ? `<span class="sat"><b class="num">${I.smile} ${st.pct}٪</b> راضون</span>` : ""}
+      ${st.visits ? `<span><b class="num">${n0(st.visits)}</b> زيارة</span>` : ""}
+      ${km != null ? `<span class="dist">${I.pin} <b class="num">${fmtKm(km)}</b></span>` : ""}`;
+  }
+
+  function staffLine(s, id) {
+    const st = Store.staffStats(s, id);
+    if (!st.cuts && st.pct == null) return "";
+    const noun = s.type === "men" ? "حلاقة" : "خدمة";
+    return `<span class="staff-stats">${st.cuts ? `<b class="num">${n0(st.cuts)}</b> ${noun}` : ""}${st.pct != null ? ` · <b class="num">${st.pct}٪</b> رضا` : ""}</span>`;
+  }
 
   function nextVisitCard() {
     const next = upcomingBookings()[0];
@@ -219,7 +260,9 @@
     const p = loadProfile();
     const h = new Date().getHours();
     const greet = `${h < 12 ? "صباح الخير" : "مساء الخير"}${p.name ? `، ${esc(p.name.split(" ")[0])}` : ""}`;
-    const maps = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.name + " " + s.address);
+    const maps = "https://www.google.com/maps/search/?api=1&query=" + (s.location ? `${s.location.lat},${s.location.lng}` : encodeURIComponent(s.name + " " + s.address));
+    const km = distOf(s);
+    const mine = sessionPhone() ? Store.customerVisits(sessionPhone(), s.id) : 0;
     return `<section class="screen">
         ${topbar()}
         <div class="salon-hero">
@@ -230,7 +273,10 @@
             <p class="slogan">${esc(s.slogan)}</p>
           </div>
           <div class="hero-meta">
-            ${s.rating ? `<span><b class="num">${I.star} ${s.rating}</b> (${s.reviews} تقييم)</span>` : ""}
+            ${statsLine(s, false)}
+            ${s.location ? (km != null ? `<span class="dist">${I.pin} يبعد عنك <b class="num">${fmtKm(km)}</b></span>`
+              : `<button type="button" class="dist-btn" data-act="near-one">${I.pin} ${state.locating ? "جاري التحديد…" : "كم يبعد عني؟"}</button>`) : ""}
+            ${mine ? `<span>زرته <b class="num">${mine}</b> ${mine === 1 ? "مرة" : mine === 2 ? "مرتين" : "مرات"}</span>` : ""}
             <span class="open-pill ${st.open ? "is-open" : ""}">${st.text}</span>
           </div>
           ${Store.isLive(s) && s.services.length
@@ -256,7 +302,8 @@
             <div class="member">
               <span class="avatar" aria-hidden="true">${esc(m.name.charAt(0))}</span>
               <span class="name">${esc(m.name)}</span>
-              <span class="role">${esc(m.role)}${m.years ? ` · <span class="num">${m.years}</span> سنة` : ""}</span>
+              <span class="role">${esc(m.role)}${m.years ? ` · ${yrs(m.years)}` : ""}</span>
+              ${staffLine(s, m.id)}
             </div>`).join("")}</div>
         </div>
 
@@ -327,7 +374,8 @@
         <button type="button" role="radio" class="person" data-act="staff" data-v="${p.id}" aria-checked="${state.staffId === p.id}">
           <span class="avatar" aria-hidden="true">${p.id === "any" ? "✦" : esc(p.name.charAt(0))}</span>
           <span class="name">${esc(p.name)}</span>
-          <span class="role">${esc(p.role)}${p.years ? ` · <span class="num">${p.years}</span> سنة خبرة` : ""}</span>
+          <span class="role">${esc(p.role)}${p.years ? ` · ${yrs(p.years)} خبرة` : ""}</span>
+          ${p.id === "any" ? "" : staffLine(s, p.id)}
         </button>`).join("")}</div>`;
   }
 
@@ -376,20 +424,74 @@
           <span class="sub">${esc(p.note)}</span>
         </button>`).join("")}</div>
       <div><h3 class="section-title" style="font-size:var(--fs-md)">بياناتك</h3><p class="hint">يصل اسمك ورقمك للصالون ليتواصل معك عند الحاجة.</p></div>
-      <div class="card form">
+      ${sessionPhone() ? `<div class="card form">
+        <div class="verified-row"><span class="num" dir="ltr">${esc(sessionPhone())}</span><span class="ok-tag">رقم مؤكَّد ✓</span></div>
         <label for="cu-name">الاسم</label>
         <input id="cu-name" data-cust="name" type="text" autocomplete="name" value="${esc(state.cust.name)}" placeholder="مثال: عبدالعزيز">
-        <label for="cu-phone">رقم الجوال</label>
-        <input id="cu-phone" data-cust="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(state.cust.phone)}" placeholder="05XXXXXXXX">
-        <p class="field-error" id="cu-err" ${state.cust.phone && !validPhone(state.cust.phone) ? "" : "hidden"}>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
-      </div>
+      </div>` : authBlock("أكّد رقم جوالك لإكمال الحجز", true)}
       <p class="demo-note">نسخة تجريبية: لا يتم خصم أي مبلغ. يُربط الدفع لاحقاً ببوابة دفع (مثل Moyasar أو HyperPay).</p>`;
   }
 
   const normPhone = (v) => String(v || "").replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
   const validPhone = (v) => /^05\d{8}$/.test(normPhone(v));
+  /* تسجيل الدخول برمز تحقق (في الحجز وفي "حسابي") */
+  function smsBox(text) {
+    return `<div class="sms-sim" role="note"><div class="sms-head"><span>رسالة نصية · عناياتي</span><span class="sms-tag">محاكاة: تصل لجوالك</span></div><p>${esc(text)}</p></div>`;
+  }
+  function authBlock(title, askName) {
+    const a = state.auth;
+    if (!a.sent) {
+      return `<div class="card form auth">
+        <b>${title}</b>
+        <p class="hint">نرسل لك رمزاً من 4 أرقام برسالة نصية. إن سبق أن حجزت بالاتصال، ستجد حسابك ومواعيدك جاهزة.</p>
+        ${askName ? `<label for="au-name">الاسم</label><input id="au-name" data-auth="name" type="text" autocomplete="name" value="${esc(a.name)}" placeholder="مثال: عبدالعزيز">` : ""}
+        <label for="au-phone">رقم الجوال</label>
+        <input id="au-phone" data-auth="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(a.phone)}" placeholder="05XXXXXXXX">
+        ${a.error ? `<p class="field-error">${esc(a.error)}</p>` : ""}
+        <button type="button" class="btn" data-act="auth-send" style="margin-top:12px">أرسل رمز التحقق</button>
+      </div>`;
+    }
+    return `${smsBox(a.sms)}
+      <div class="card form auth">
+        <b>اكتب الرمز الذي وصلك</b>
+        <p class="hint">أُرسل إلى <span class="num" dir="ltr">${esc(a.phone)}</span>، وصالح 5 دقائق.</p>
+        <label for="au-code">رمز التحقق</label>
+        <input id="au-code" data-auth="code" class="otp-input num" inputmode="numeric" autocomplete="one-time-code" maxlength="4" dir="ltr" placeholder="••••" value="${esc(a.code)}">
+        ${a.error ? `<p class="field-error">${esc(a.error)}</p>` : ""}
+        <button type="button" class="btn" data-act="auth-verify" style="margin-top:12px">تأكيد</button>
+        <div class="row-actions"><button type="button" class="link" data-act="auth-send">إعادة إرسال</button><button type="button" class="link" data-act="auth-reset">تغيير الرقم</button></div>
+      </div>`;
+  }
+  function authSend() {
+    const a = state.auth;
+    a.phone = normPhone(a.phone);
+    if (!validPhone(a.phone)) { a.error = "اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05."; return; }
+    const r = Store.sendOtp(a.phone, "login");
+    if (!r.ok) { a.error = `انتظر ${r.wait} ثانية قبل إعادة الإرسال.`; return; }
+    a.sent = true; a.code = ""; a.error = "";
+    a.sms = `عناياتي: رمز الدخول ${r.code}. لا تشاركه مع أي أحد. صالح 5 دقائق.`;
+  }
+  function authVerify() {
+    const a = state.auth;
+    const res = Store.verifyOtp(a.phone, "login", a.code);
+    const msg = { wrong: "الرمز غير صحيح.", expired: "انتهت صلاحية الرمز. أعد الإرسال.", locked: "محاولات كثيرة. أعد إرسال رمز جديد.", missing: "أعد إرسال الرمز." }[res];
+    if (msg) { a.error = msg; return false; }
+    const existing = Store.customer(a.phone);
+    const c = Store.upsertCustomer({ phone: a.phone, name: a.name.trim(), via: "app" });
+    const p = loadProfile();
+    saveProfile({ ...p, phone: a.phone, verified: true, name: c.name || a.name.trim() || p.name });
+    state.cust = { name: c.name || a.name.trim() || p.name || "", phone: a.phone };
+    state.auth = newAuth();
+    if (existing && existing.createdVia === "salon") {
+      const from = DATA.salons.find((x) => x.id === existing.createdBy);
+      toast(`أهلاً ${existing.name || ""}! حسابك جاهز${from ? ` من ${from.name}` : ""}، وتجد مواعيدك في "مواعيدي".`);
+    } else toast(existing ? "أهلاً بعودتك" : "أُنشئ حسابك برقم مؤكَّد");
+    return true;
+  }
+  const newAuth = () => ({ phone: "", name: "", code: "", sent: false, sms: "", error: "" });
+
   function canNext() {
-    const custOk = state.cust.name.trim().length >= 2 && validPhone(state.cust.phone);
+    const custOk = !!sessionPhone() && state.cust.name.trim().length >= 2;
     return [state.services.length > 0, !!state.staffId, !!(state.date && state.time), !!state.payment && custOk && !state.paying][state.step];
   }
 
@@ -446,6 +548,25 @@
     return end < new Date() ? ["past", "منتهٍ"] : ["upcoming", "قادم"];
   }
 
+  /* "كيف كانت زيارتك؟" بثلاث درجات للصالون وللمختص */
+  function rateBox(b, s) {
+    const V = Store.VERDICTS;
+    if (b.feedback) {
+      return `<div class="rated"><span>تقييمك للصالون: <b>${V[b.feedback.salon]}</b></span><span>لـ${esc(b.staffName)}: <b>${V[b.feedback.staff]}</b></span>${b.feedback.note ? `<span class="hint">"${esc(b.feedback.note)}"</span>` : ""}</div>`;
+    }
+    const r = state.rate && state.rate.code === b.code ? state.rate : { code: b.code, salon: null, staff: null, note: "" };
+    const row = (key, label) => `<div class="verdict-row"><span>${label}</span><div class="verdicts" role="radiogroup" aria-label="${label}">
+      ${[["very", I.fVery], ["ok", I.fOk], ["no", I.fNo]].map(([v, ic]) => `<button type="button" role="radio" class="verdict v-${v}" data-act="rate" data-v="${b.code}|${key}|${v}" aria-checked="${r[key] === v}">${ic}<span>${V[v]}</span></button>`).join("")}
+    </div></div>`;
+    return `<div class="rate-box">
+      <b>كيف كانت زيارتك؟</b>
+      ${row("salon", esc(s.name))}
+      ${row("staff", esc(b.staffName))}
+      <input type="text" class="rate-note" data-rate-note="${b.code}" placeholder="ملاحظة للصالون (اختياري)" value="${esc(r.note)}">
+      <button type="button" class="btn" data-act="rate-send" data-v="${b.code}" ${r.salon && r.staff ? "" : "disabled"}>إرسال التقييم</button>
+    </div>`;
+  }
+
   function viewMine() {
     const list = myBookings().slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const items = list.map((b) => {
@@ -459,6 +580,7 @@
         </div>
         <div class="booking-when">${I.cal}<span>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></span></div>
         <div class="meta"><span>رقم الحجز <b class="num" style="direction:ltr;display:inline-block">${b.code}</b></span><span class="num">${money(b.total)}</span></div>
+        ${b.status === "completed" ? rateBox(b, s) : ""}
         ${cls === "upcoming" ? (asking
           ? `<div class="confirm-box"><p>هل تريد إلغاء هذا الموعد؟</p><div class="booking-actions">
                <button type="button" class="btn danger" data-act="cancel-yes" data-v="${b.code}">نعم، ألغِ الموعد</button>
@@ -472,7 +594,9 @@
         ${topbar()}
         <div class="hello"><h1>مواعيدي</h1></div>
         ${list.length ? `<div class="bookings">${items}</div>`
-          : `<div class="empty">${I.cal}<p>لا توجد مواعيد بعد. ستظهر حجوزاتك هنا بعد تأكيدها.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="home">احجز موعدك الأول</button></div>`}
+          : sessionPhone()
+            ? `<div class="empty">${I.cal}<p>لا توجد مواعيد بعد. ستظهر حجوزاتك هنا، ومنها ما يحجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="home">احجز موعدك الأول</button></div>`
+            : `<div class="empty">${I.cal}<p>سجّل دخولك برقم جوالك لتظهر مواعيدك، ومنها ما حجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="profile">تسجيل الدخول</button></div>`}
       </section>${tabbar("mine")}`;
   }
 
@@ -525,8 +649,8 @@
         <label for="pf-name">الاسم</label>
         <input id="pf-name" name="name" type="text" autocomplete="name" value="${esc(p.name)}" placeholder="مثال: عبدالعزيز">
         <label for="pf-phone">رقم الجوال</label>
-        <input id="pf-phone" name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" value="${esc(p.phone)}" placeholder="05XXXXXXXX">
-        <p class="field-error" id="pf-phone-err" hidden>اكتب رقم جوال سعودي من 10 أرقام يبدأ بـ 05.</p>
+        <p class="verified-row"><span class="num" dir="ltr">${esc(p.phone)}</span><span class="ok-tag">رقم مؤكَّد ✓</span></p>
+        <p class="hint">لتغيير الرقم سجّل الخروج وادخل بالرقم الجديد.</p>
         <label for="pf-email">البريد الإلكتروني (اختياري)</label>
         <input id="pf-email" name="email" type="email" dir="ltr" autocomplete="email" value="${esc(p.email)}" placeholder="name@example.com">
         <label for="pf-pref">الصوالين المفضلة</label>
@@ -537,18 +661,18 @@
       </form>` : `
       <div class="card">
         <div class="row"><span>الاسم</span><span>${p.name ? esc(p.name) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
-        <div class="row"><span>الجوال</span><span class="num" dir="ltr">${p.phone ? esc(p.phone) : '<span class="hint">لم يُضف بعد</span>'}</span></div>
+        <div class="row"><span>الجوال</span><span><span class="num" dir="ltr">${esc(p.phone)}</span> <span class="ok-tag">✓</span></span></div>
         <div class="row"><span>البريد</span><span dir="ltr">${p.email ? esc(p.email) : '<span class="hint">—</span>'}</span></div>
         <div class="row"><span>الصوالين المفضلة</span><span>${prefLabel}</span></div>
         <div class="row"><span>عضو منذ</span><span>${since}</span></div>
       </div>
-      <button type="button" class="btn ghost wide" data-act="edit-profile">تعديل البيانات</button>`;
+      <div class="booking-actions"><button type="button" class="btn ghost" data-act="edit-profile">تعديل البيانات</button><button type="button" class="btn ghost" data-act="logout">تسجيل الخروج</button></div>`;
 
     return `<section class="screen">
         ${topbar()}
         <div class="profile-head">
           <span class="avatar lg" aria-hidden="true">${p.name ? esc(p.name.charAt(0)) : I.user}</span>
-          <div><h1>${p.name ? esc(p.name) : "حسابي"}</h1><p class="hint">${p.name ? `نقاط الولاء: <b class="num">${st.points}</b>` : "أضف اسمك ورقمك ليسهل على الصالون التواصل معك."}</p></div>
+          <div><h1>${p.name ? esc(p.name) : "حسابي"}</h1><p class="hint">${p.name ? `نقاط الولاء: <b class="num">${st.points}</b>` : (sessionPhone() ? "أضف اسمك ليعرفك الصالون." : "سجّل دخولك لتظهر مواعيدك ونقاطك.")}</p></div>
         </div>
 
         <div class="stats">
@@ -571,7 +695,7 @@
           <div class="row"><span>مواعيد ملغاة</span><span class="num">${st.cancelled}</span></div>
         </div>
 
-        <div class="block"><h2 class="section-title">بياناتي</h2>${info}</div>
+        <div class="block"><h2 class="section-title">بياناتي</h2>${sessionPhone() ? info : authBlock("سجّل الدخول برقم جوالك", false)}</div>
 
         <div class="block">
           <h2 class="section-title">المظهر</h2>
@@ -638,7 +762,7 @@
   function startBooking(id, serviceId) {
     if (!Store.isLive(Store.salon(id))) { toast("الحجز في هذا الصالون متوقف مؤقتاً"); return; }
     const p = loadProfile();
-    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: p.phone || "" } });
+    Object.assign(state, { salonId: id, step: 0, services: serviceId ? [serviceId] : [], staffId: null, date: null, time: null, payment: null, cust: { name: p.name || "", phone: sessionPhone() }, auth: { ...newAuth(), name: p.name || "" } });
     go("book");
   }
 
@@ -660,11 +784,12 @@
         services: state.services.slice(), serviceNames: chosenServices().map((x) => x.name),
         date: state.date, time: state.time, minutes: totalMin(), total: totalPrice(),
         payment: state.payment, status: "confirmed", createdAt: new Date().toISOString(),
-        customer: { name: state.cust.name.trim(), phone: normPhone(state.cust.phone) }
+        customer: { name: state.cust.name.trim(), phone: sessionPhone() }
       };
       Store.addBooking(b);
+      Store.upsertCustomer({ phone: b.customer.phone, name: b.customer.name, via: "app", salonId: s.id });
       const p = loadProfile();
-      if (!p.name || !p.phone) saveProfile({ ...p, name: p.name || b.customer.name, phone: p.phone || b.customer.phone });
+      if (!p.name) saveProfile({ ...p, name: b.customer.name });
       state.paying = false; state.lastBooking = b;
       go("done");
     }, 900);
@@ -696,6 +821,27 @@
       case "theme": setTheme(v); render(); break;
       case "edit-profile": state.editProfile = true; render(); { const f = document.getElementById("pf-name"); if (f) f.focus(); } break;
       case "edit-cancel": state.editProfile = false; render(); break;
+      case "near":
+        if (state.sortNear && state.here) { state.sortNear = false; render(); }
+        else if (state.here && Date.now() - (state.here.at || 0) < 10 * 60000) { state.sortNear = true; render(); }
+        else locate(() => { state.sortNear = true; });
+        break;
+      case "near-one": locate(); break;
+      case "rate": {
+        const [code, key, val] = v.split("|");
+        if (!state.rate || state.rate.code !== code) state.rate = { code, salon: null, staff: null, note: "" };
+        state.rate[key] = val; render(); break;
+      }
+      case "rate-send": {
+        const r = state.rate;
+        if (!r || r.code !== v || !r.salon || !r.staff) return;
+        Store.rateBooking(v, { salon: r.salon, staff: r.staff, note: r.note.trim() });
+        state.rate = null; render(); toast("شكراً! وصل تقييمك للصالون"); break;
+      }
+      case "auth-send": authSend(); render(); document.getElementById(state.auth.sent ? "au-code" : "au-phone")?.focus(); break;
+      case "auth-verify": if (authVerify()) render(); else { render(); document.getElementById("au-code")?.focus(); } break;
+      case "auth-reset": state.auth = { ...newAuth(), phone: state.auth.phone, name: state.auth.name }; render(); break;
+      case "logout": { const p = loadProfile(); saveProfile({ ...p, verified: false }); state.editProfile = false; render(); toast("سُجّل خروجك"); break; }
       case "clear-ask": state.clearAsk = true; render(); break;
       case "clear-no": state.clearAsk = false; render(); break;
       case "clear-yes":
@@ -727,12 +873,25 @@
 
   /* بيانات العميل في خطوة الدفع */
   $app.addEventListener("input", (e) => {
+    if (e.target.dataset && e.target.dataset.rateNote) {
+      const code = e.target.dataset.rateNote;
+      if (!state.rate || state.rate.code !== code) state.rate = { code, salon: null, staff: null, note: "" };
+      state.rate.note = e.target.value; return;
+    }
+    const ak = e.target.dataset && e.target.dataset.auth;
+    if (ak) { state.auth[ak] = e.target.value; if (ak === "name") state.cust.name = e.target.value; return; }
     const k = e.target.dataset && e.target.dataset.cust;
     if (!k) return;
     state.cust[k] = e.target.value;
     const btn = $app.querySelector('[data-act="next"]');
     if (btn) btn.disabled = !canNext();
-    if (k === "phone") { const err = document.getElementById("cu-err"); const v = e.target.value; err.hidden = !v || normPhone(v).length < 10 || validPhone(v); }
+
+  });
+
+  $app.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.target.dataset || !e.target.dataset.auth) return;
+    e.preventDefault();
+    $app.querySelector(state.auth.sent ? '[data-act="auth-verify"]' : '[data-act="auth-send"]')?.click();
   });
 
   /* حفظ بيانات الحساب */
@@ -740,11 +899,8 @@
     if (e.target.id !== "profile-form") return;
     e.preventDefault();
     const f = e.target;
-    const phone = f.phone.value.replace(/[\s-]/g, "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-    const err = document.getElementById("pf-phone-err");
-    if (phone && !/^05\d{8}$/.test(phone)) { err.hidden = false; f.phone.setAttribute("aria-invalid", "true"); f.phone.focus(); return; }
     const p = loadProfile();
-    saveProfile({ ...p, name: f.name.value.trim(), phone, email: f.email.value.trim(), pref: f.pref.value });
+    saveProfile({ ...p, name: f.name.value.trim(), email: f.email.value.trim(), pref: f.pref.value });
     state.filter = f.pref.value;
     state.editProfile = false; render(); toast("تم حفظ بياناتك");
   });
@@ -778,6 +934,7 @@
     if (SALON) Object.assign(SALON, Store.salon(SALON.id) || {});
     if (state.view !== "splash" && state.view !== "book") render();
   });
+  state.here = getItem(HERE_KEY, null);
   state.filter = loadProfile().pref || "all";
   state.view = "splash";
   render();

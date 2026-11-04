@@ -7,6 +7,9 @@
    salons[]   : كل صالون ببياناته الخاصة (الخدمات، الفريق، الساعات، الهوية، الاشتراك)
    bookings[] : كل حجز مربوط بصالونه عبر salonId
    billing    : أسعار الاشتراك والفترة التجريبية وبيانات التحويل البنكي
+   customers[]: حسابات العملاء، مفتاحها رقم الجوال المؤكَّد برمز تحقق.
+                يُنشأ الحساب من التطبيق، أو من لوحة الصالون عند الحجز الهاتفي.
+   otps       : رموز التحقق المؤقتة (في النظام الحقيقي تُرسل SMS ولا تُحفظ إلا مشفّرة على الخادم)
 
    نموذج العمل: كل صالون يشترك شهرياً أو سنوياً، ويحصل على:
    تطبيقه الخاص (رابطه، هويته، أيقونته، QR) + لوحة الإدارة + الظهور في منصة عناياتي.
@@ -54,6 +57,18 @@ window.Store = (function () {
   /* يكمّل أي بيانات قديمة بالحقول الجديدة (ترقية تلقائية) */
   function normalize(d) {
     d.billing = { ...DEFAULT_BILLING, ...(d.billing || {}) };
+    d.customers = d.customers || [];
+    /* ترقية: الموقع والأرقام التجريبية من البيانات الأولية، وإزالة النجوم القديمة */
+    const base = window.ENAYATI_DATA.salons;
+    d.salons.forEach((s) => {
+      const src = base.find((x) => x.id === s.id);
+      delete s.rating; delete s.reviews;
+      if (!src) return;
+      if (!s.location && src.location) s.location = src.location;
+      if (!s.seed && src.seed) s.seed = src.seed;
+      s.staff.forEach((m) => { const sm = src.staff.find((x) => x.id === m.id); if (sm && m.seedCuts == null && sm.seedCuts != null) m.seedCuts = sm.seedCuts; });
+    });
+    d.otps = d.otps || {};
     d.salons.forEach((s) => {
       if (!s.subscription) s.subscription = makeSub(s.id, s.createdAt, d.billing);
       s.subscription.payments = s.subscription.payments || [];
@@ -85,7 +100,7 @@ window.Store = (function () {
       if (raw && raw === cacheRaw) return cacheData;
       const d = JSON.parse(raw);
       if (d && d.version === 1) {
-        const needs = !d.billing || d.salons.some((s) => !s.subscription);
+        const needs = !d.billing || !d.customers || d.salons.some((s) => !s.subscription || "rating" in s);
         normalize(d);
         if (needs) { write(d); return d; }
         cacheRaw = raw; cacheData = d; return d;
@@ -113,6 +128,11 @@ window.Store = (function () {
     if (sub.plan === "trial") return { ...base, code: "trial", label: `تجربة · ${daysText(days)}`, live: true };
     if (days <= 5) return { ...base, code: "expiring", label: `ينتهي خلال ${daysText(days)}`, live: true };
     return { ...base, code: "active", label: "مشترك", live: true };
+  }
+  /* نسبة الرضا = (راضٍ جداً + راضٍ) ÷ كل التقييمات */
+  function satisfaction(r) {
+    const total = r.very + r.ok + r.no;
+    return { ratings: r, rated: total, pct: total ? Math.round(((r.very + r.ok) / total) * 100) : null };
   }
   function daysText(n) {
     n = Math.max(0, n);
@@ -165,6 +185,99 @@ window.Store = (function () {
     },
     rejectRequest(salonId, requestId) {
       mutate((d) => { const s = findSalon(d, salonId); s.subscription.requests = s.subscription.requests.filter((r) => r.id !== requestId); });
+    },
+
+    /* العملاء */
+    customer: (phone) => read().customers.find((c) => c.phone === phone) || null,
+    customers: () => read().customers,
+    /* ينشئ الحساب أو يحدّثه. via: "app" من التطبيق، أو "salon" عند تسجيله من الصالون */
+    upsertCustomer({ phone, name, via, salonId }) {
+      let out;
+      mutate((d) => {
+        let c = d.customers.find((x) => x.phone === phone);
+        if (!c) { c = { phone, name: name || "", verified: true, createdAt: new Date().toISOString(), createdVia: via, createdBy: salonId || null, salons: [] }; d.customers.push(c); }
+        if (name && !c.name) c.name = name;
+        if (salonId && !c.salons.includes(salonId)) c.salons.push(salonId);
+        out = { ...c };
+      });
+      return out;
+    },
+
+    /* رموز التحقق: 4 أرقام، صالحة 5 دقائق، 5 محاولات، وإعادة الإرسال بعد 30 ثانية.
+       purpose يربط الرمز بغرضه: "login" لدخول التطبيق، أو "salon:<id>" لتسجيل العميل عند صالون محدد،
+       فلا يصلح رمز الصالون للدخول إلى حساب العميل. */
+    sendOtp(phone, purpose) {
+      const d = read(); const prev = d.otps[phone];
+      if (prev && prev.purpose === purpose && Date.now() - prev.sentAt < 30000) {
+        return { ok: false, wait: Math.ceil((30000 - (Date.now() - prev.sentAt)) / 1000) };
+      }
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      mutate((x) => { x.otps[phone] = { code, purpose, sentAt: Date.now(), expiresAt: Date.now() + 5 * 60000, tries: 0 }; });
+      return { ok: true, code }; /* code يُعاد هنا للمحاكاة فقط، ولا يُعاد أبداً في النظام الحقيقي */
+    },
+    verifyOtp(phone, purpose, code) {
+      const o = read().otps[phone];
+      if (!o || o.purpose !== purpose) return "missing";
+      if (Date.now() > o.expiresAt) return "expired";
+      if (o.tries >= 5) return "locked";
+      if (String(code).trim() !== o.code) { const tries = o.tries + 1; mutate((x) => { x.otps[phone].tries = tries; }); return tries >= 5 ? "locked" : "wrong"; }
+      mutate((x) => { delete x.otps[phone]; });
+      return "ok";
+    },
+
+    /* الأوقات المتاحة لصالون في يوم معيّن، لمدة معيّنة، ولمختص أو "any" */
+    freeSlots(salon, date, duration, staffId) {
+      const bookings = read().bookings.filter((b) => b.salonId === salon.id && b.date === date && b.status !== "cancelled");
+      const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      const pad = (n) => String(n).padStart(2, "0");
+      const busy = (sid, start) => bookings.some((b) => b.staffId === sid && start < toMin(b.time) + b.minutes && start + duration > toMin(b.time));
+      const pool = staffId && staffId !== "any" ? salon.staff.filter((p) => p.id === staffId) : salon.staff;
+      const now = new Date();
+      const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` === date;
+      const nowMin = now.getHours() * 60 + now.getMinutes() + 15;
+      const out = [];
+      for (let m = salon.hours.open * 60; m + duration <= salon.hours.close * 60; m += 30) {
+        if (today && m < nowMin) continue;
+        const free = pool.find((p) => !busy(p.id, m));
+        if (free) out.push({ time: `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`, staff: free });
+      }
+      return out;
+    },
+
+    /* ---------- الزيارات والرضا ----------
+       الزيارة = حجز سجّله الصالون "مكتمل".
+       الرضا ثلاث درجات بعد كل زيارة: very (راضٍ جداً) · ok (راضٍ) · no (غير راضٍ)
+       ويقيّم العميل الصالون والمختص كلٌّ على حدة. */
+    VERDICTS: { very: "راضٍ جداً", ok: "راضٍ", no: "غير راضٍ" },
+    rateBooking(code, { salon, staff, note }) {
+      mutate((d) => { const b = d.bookings.find((x) => x.code === code); if (b && b.status === "completed" && !b.feedback) b.feedback = { salon, staff, note: note || "", at: new Date().toISOString() }; });
+    },
+    salonStats(s) {
+      const done = read().bookings.filter((b) => b.salonId === s.id && b.status === "completed");
+      const r = { very: 0, ok: 0, no: 0, ...((s.seed && s.seed.ratings) || {}) };
+      done.forEach((b) => { if (b.feedback && r[b.feedback.salon] != null) r[b.feedback.salon] += 1; });
+      return { visits: ((s.seed && s.seed.visits) || 0) + done.length, ...satisfaction(r) };
+    },
+    staffStats(s, staffId) {
+      const m = s.staff.find((x) => x.id === staffId) || {};
+      const done = read().bookings.filter((b) => b.salonId === s.id && b.staffId === staffId && b.status === "completed");
+      const r = { very: 0, ok: 0, no: 0 };
+      /* الأرقام التجريبية للمختص تتبع نسب صالونه */
+      if (m.seedCuts && s.seed && s.seed.ratings) { const t = s.seed.ratings, n = t.very + t.ok + t.no; ["very", "ok", "no"].forEach((k) => { r[k] = Math.round((t[k] / n) * m.seedCuts * 0.3); }); }
+      done.forEach((b) => { if (b.feedback && r[b.feedback.staff] != null) r[b.feedback.staff] += 1; });
+      return { cuts: (m.seedCuts || 0) + done.length, ...satisfaction(r) };
+    },
+    customerVisits(phone, salonId) {
+      return read().bookings.filter((b) => b.customer && b.customer.phone === phone && b.salonId === salonId && b.status === "completed").length;
+    },
+
+    /* المسافة بالكيلومتر بين نقطتين (معادلة هافرساين) */
+    distanceKm(a, b) {
+      if (!a || !b) return null;
+      const R = 6371, rad = (x) => (x * Math.PI) / 180;
+      const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
     },
 
     /* الحجوزات */
