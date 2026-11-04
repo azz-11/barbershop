@@ -1,0 +1,28 @@
+{
+  "name": "القصّاص",
+  "short_name": "القصّاص",
+  "description": "القصة اللي تشبهك. احجز موعدك في القصّاص.",
+  "lang": "ar",
+  "dir": "rtl",
+  "id": "../?s=qass",
+  "start_url": "../?s=qass",
+  "scope": "../",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1F2A44",
+  "theme_color": "#1F2A44",
+  "icons": [
+    {
+      "src": "../icons/salons/qass-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/salons/qass-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

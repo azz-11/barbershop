@@ -1,0 +1,28 @@
+{
+  "name": "لمسة مها",
+  "short_name": "لمسة مها",
+  "description": "جمالك يبدأ من هنا. احجز موعدك في لمسة مها.",
+  "lang": "ar",
+  "dir": "rtl",
+  "id": "../?s=maha",
+  "start_url": "../?s=maha",
+  "scope": "../",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#6B2D4A",
+  "theme_color": "#6B2D4A",
+  "icons": [
+    {
+      "src": "../icons/salons/maha-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/salons/maha-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "صالون أسرار العناية",
+  "short_name": "صالون أسرار العناية",
+  "description": "سرّ أناقتك عندنا. احجز موعدك في صالون أسرار العناية.",
+  "lang": "ar",
+  "dir": "rtl",
+  "id": "../?s=asrar",
+  "start_url": "../?s=asrar",
+  "scope": "../",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2F5233",
+  "theme_color": "#2F5233",
+  "icons": [
+    {
+      "src": "../icons/salons/asrar-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../icons/salons/asrar-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
