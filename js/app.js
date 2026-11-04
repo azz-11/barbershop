@@ -26,6 +26,10 @@
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
+    wa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.6-4.7A8.5 8.5 0 1 1 8 19.8z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2z"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1-4.5A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>',
+    bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
     pin: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
     smile: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
     fVery: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7.5 13.5c1 2 2.6 3 4.5 3s3.5-1 4.5-3z" fill="currentColor"/><path d="M8.5 9.5h.01M15.5 9.5h.01"/></svg>',
@@ -55,6 +59,9 @@
     lastBooking: null,
     cancelAsk: null,
     cust: { name: "", phone: "" },
+    openSalon: null,    // صفحة صالون مفتوحة من المنصة
+    chat: null,         // { salonId, bookingCode, draft, from }
+    cart: { salonId: null, items: {}, note: "", booking: "" },
     auth: { phone: "", name: "", code: "", sent: false, sms: "", error: "" }
   };
 
@@ -160,7 +167,7 @@
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
     const cards = list.map((s) => `
-      <button type="button" class="salon" data-act="salon" data-v="${s.id}" style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}">
+      <button type="button" class="salon" data-act="open-salon" data-v="${s.id}" style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}">
         <span class="monogram" aria-hidden="true">${esc(initials(s.name))}</span>
         <span class="salon-info">
           <h3>${esc(s.name)}</h3>
@@ -255,7 +262,113 @@
   }
 
   /* الصفحة الرئيسية في وضع الصالون الواحد */
-  function viewSalonHome(s) {
+  /* أزرار التواصل: اتصال، واتساب، محادثة داخل التطبيق */
+  const waNumber = (ph) => "966" + String(ph).replace(/^0/, "");
+  function contactRow(s, bookingCode) {
+    const c = s.contact || {};
+    const text = bookingCode ? `السلام عليكم، بخصوص حجزي رقم ${bookingCode} في ${s.name}` : `السلام عليكم، أتواصل معكم من تطبيق عناياتي`;
+    const btns = [];
+    if (c.chat !== false) btns.push(`<button type="button" class="contact-btn primary" data-act="chat" data-v="${s.id}|${bookingCode || ""}">${I.chat}<span>محادثة</span>${unreadFor(s.id) ? `<span class="badge num">${unreadFor(s.id)}</span>` : ""}</button>`);
+    if (c.call !== false && c.phone) btns.push(`<a class="contact-btn" href="tel:${esc(c.phone)}">${I.phone}<span>اتصال</span></a>`);
+    if (c.wa !== false && c.whatsapp) btns.push(`<a class="contact-btn" href="https://wa.me/${waNumber(c.whatsapp)}?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">${I.wa}<span>واتساب</span></a>`);
+    return btns.length ? `<div class="contact-row">${btns.join("")}</div>` : "";
+  }
+  const unreadFor = (salonId) => (sessionPhone() ? Store.unread(Store.thread(salonId, sessionPhone()), "customer") : 0);
+
+  /* منتجات الصالون */
+  const cartFor = (s) => (state.cart.salonId === s.id ? state.cart.items : {});
+  const cartCount = (s) => Object.values(cartFor(s)).reduce((a, n) => a + n, 0);
+  const cartTotal = (s) => Object.entries(cartFor(s)).reduce((a, [id, n]) => { const pr = s.products.find((x) => x.id === id); return a + (pr ? pr.price * n : 0); }, 0);
+  function productsHtml(s) {
+    if (!s.productsEnabled || !s.products.length) return "";
+    const cats = [...new Set(s.products.map((x) => x.category || "منتجات"))];
+    const items = cartFor(s);
+    return `<div class="block" id="products">
+      <h2 class="section-title">منتجات الصالون</h2>
+      <p class="hint">اطلبها الآن واستلمها من الصالون، أو مع موعدك القادم. الدفع عند الاستلام.</p>
+      ${cats.map((c) => `<h3 class="group-title">${esc(c)}</h3>
+        <div class="products">${s.products.filter((x) => (x.category || "منتجات") === c).map((x) => {
+          const q = items[x.id] || 0;
+          return `<div class="product ${x.inStock ? "" : "out"}">
+            <span class="product-ic" aria-hidden="true">${I.bag}</span>
+            <b class="product-name">${esc(x.name)}</b>
+            ${x.desc ? `<span class="hint">${esc(x.desc)}</span>` : ""}
+            <span class="product-foot"><b class="num">${money(x.price)}</b>
+              ${!x.inStock ? `<span class="status cancelled">نفد</span>`
+                : q ? `<span class="qty"><button type="button" data-act="cart-dec" data-v="${x.id}" aria-label="أنقص">−</button><b class="num">${q}</b><button type="button" data-act="cart-add" data-v="${x.id}" aria-label="زد">+</button></span>`
+                : `<button type="button" class="btn add-small" data-act="cart-add" data-v="${x.id}">أضف</button>`}</span>
+          </div>`;
+        }).join("")}</div>`).join("")}
+    </div>`;
+  }
+  function cartBar(s) {
+    const n = cartCount(s);
+    if (!n) return "";
+    return `<div class="cart-bar"><div class="cart-inner">
+      <span>${I.bag} <b class="num">${n}</b> ${n === 1 ? "منتج" : n === 2 ? "منتجان" : "منتجات"} · <b class="num">${money(cartTotal(s))}</b></span>
+      <button type="button" class="btn" data-act="cart-open">إتمام الطلب</button></div></div>`;
+  }
+
+  /* السلة وتأكيد الطلب */
+  function viewCart() {
+    const s = Store.salon(state.cart.salonId);
+    const items = Object.entries(state.cart.items).filter(([, n]) => n > 0).map(([id, n]) => ({ p: s.products.find((x) => x.id === id), n })).filter((x) => x.p);
+    const upcoming = upcomingBookings().filter((b) => b.salonId === s.id);
+    return `<section class="screen">
+        ${topbar(true, "سلة " + s.name)}
+        ${items.length ? `<div class="card">${items.map(({ p, n }) => `
+          <div class="row cart-row"><span>${esc(p.name)}<br><span class="hint num">${money(p.price)} × ${n}</span></span>
+            <span class="qty"><button type="button" data-act="cart-dec" data-v="${p.id}" aria-label="أنقص">−</button><b class="num">${n}</b><button type="button" data-act="cart-add" data-v="${p.id}" aria-label="زد">+</button></span></div>`).join("")}
+          <div class="row total"><span>الإجمالي</span><span class="num">${money(cartTotal(s))}</span></div></div>
+        <div class="card form">
+          <b>الاستلام</b>
+          <p class="hint">من ${esc(s.name)}${s.address ? ` · ${esc(s.address)}` : ""}. الدفع عند الاستلام.</p>
+          ${upcoming.length ? `<label for="cart-booking">استلمها مع موعدي</label>
+            <select id="cart-booking" data-cart="booking"><option value="">لا، سأمرّ لاستلامها</option>${upcoming.map((b) => `<option value="${b.code}" ${state.cart.booking === b.code ? "selected" : ""}>${fmtDate(b.date, { weekday: "long", day: "numeric", month: "short" })} · ${fmtTime(b.time)}</option>`).join("")}</select>` : ""}
+          <label for="cart-note">ملاحظة (اختياري)</label>
+          <input id="cart-note" data-cart="note" value="${esc(state.cart.note)}" placeholder="مثال: اللون الأحمر من الطلاء">
+        </div>
+        ${sessionPhone() ? `<button type="button" class="btn wide" data-act="order">تأكيد الطلب</button>` : authBlock("سجّل دخولك لتأكيد الطلب", true)}`
+        : `<div class="empty">${I.bag}<p>السلة فارغة.</p></div>`}
+      </section>${tabbar("home")}`;
+  }
+
+  /* المحادثة مع الصالون */
+  function viewChat() {
+    const c = state.chat; const s = Store.salon(c.salonId);
+    if (!sessionPhone()) {
+      return `<section class="screen">${topbar(true, "محادثة " + s.name)}${authBlock("سجّل دخولك لتبدأ المحادثة", true)}</section>${tabbar("mine")}`;
+    }
+    const t = Store.thread(s.id, sessionPhone());
+    if (t && Store.unread(t, "customer")) Store.markRead(s.id, sessionPhone(), "customer");
+    const msgs = t ? t.messages : [];
+    const quick = ["أريد تعديل موعدي", "هل يوجد وقت متاح اليوم؟", "أين موقعكم بالضبط؟", "هل المنتج متوفر؟"];
+    return `<section class="screen chat-screen">
+        ${topbar(true, s.name)}
+        ${contactRow({ ...s, contact: { ...(s.contact || {}), chat: false } }, c.bookingCode)}
+        ${c.bookingCode ? `<p class="chat-ctx">بخصوص الحجز <b class="num" dir="ltr">${esc(c.bookingCode)}</b></p>` : ""}
+        <div class="messages" id="messages">
+          ${msgs.length ? msgs.map((m) => `<div class="msg ${m.from === "customer" ? "me" : "them"}">
+              ${m.bookingCode ? `<span class="msg-ref num" dir="ltr">${esc(m.bookingCode)}</span>` : ""}
+              <p>${esc(m.text)}</p><time class="num">${fmtTime(m.at.slice(11, 16))}</time></div>`).join("")
+            : `<div class="empty"><p>اكتب رسالتك، ويصل ردّ الصالون هنا. يرد أي فرد من فريق الصالون من لوحته.</p></div>`}
+        </div>
+        <div class="quick">${quick.map((q) => `<button type="button" class="chip" data-act="chat-quick" data-v="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+        <form class="chat-form" id="chat-form" novalidate>
+          <input id="chat-input" data-chat="1" autocomplete="off" value="${esc(c.draft || "")}" placeholder="اكتب رسالة…" aria-label="الرسالة">
+          <button type="submit" class="btn">إرسال</button>
+        </form>
+      </section>`;
+  }
+  function sendChat(text) {
+    const c = state.chat; text = String(text || "").trim();
+    if (!text) return;
+    Store.sendMessage(c.salonId, sessionPhone(), { from: "customer", text, name: loadProfile().name, bookingCode: c.refSent ? null : c.bookingCode || null });
+    c.refSent = true;
+    c.draft = ""; c.focus = true; render();
+  }
+
+  function viewSalonHome(s, inPlatform) {
     const st = openStatus(s);
     const p = loadProfile();
     const h = new Date().getHours();
@@ -264,7 +377,7 @@
     const km = distOf(s);
     const mine = sessionPhone() ? Store.customerVisits(sessionPhone(), s.id) : 0;
     return `<section class="screen">
-        ${topbar()}
+        ${inPlatform ? topbar(true, s.name) : topbar()}
         <div class="salon-hero">
           <span class="monogram xl" aria-hidden="true">${esc(initials(s.name))}</span>
           <div class="salon-hero-text">
@@ -283,6 +396,7 @@
             ? `<button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>`
             : `<p class="hero-note">${Store.isLive(s) ? "يجهّز الصالون قائمة خدماته، والحجز متاح قريباً." : "الحجز عبر التطبيق متوقف مؤقتاً. تواصل مع الصالون مباشرة."}</p>`}
         </div>
+        ${contactRow(s)}
         ${nextVisitCard()}
 
         <div class="block">
@@ -307,6 +421,8 @@
             </div>`).join("")}</div>
         </div>
 
+        ${productsHtml(s)}
+
         <div class="block">
           <h2 class="section-title">عن ${esc(s.name)}</h2>
           <p class="about">${esc(s.about)}</p>
@@ -317,8 +433,8 @@
           ${s.address ? `<a class="btn ghost wide map-link" href="${maps}" target="_blank" rel="noopener">افتح الموقع في الخرائط</a>` : ""}
         </div>
 
-        <a class="powered" href="./">يعمل بواسطة <b>عناياتي</b></a>
-      </section>${tabbar("home")}`;
+        ${inPlatform ? "" : `<a class="powered" href="./">يعمل بواسطة <b>عناياتي</b></a>`}
+      </section>${cartBar(s)}${tabbar("home")}`;
   }
 
   function themeBtn() {
@@ -586,18 +702,46 @@
                <button type="button" class="btn danger" data-act="cancel-yes" data-v="${b.code}">نعم، ألغِ الموعد</button>
                <button type="button" class="btn ghost" data-act="cancel-no">تراجع</button></div></div>`
           : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="cancel-ask" data-v="${b.code}">إلغاء الموعد</button>
-               <button type="button" class="btn ghost" data-act="rebook" data-v="${b.salonId}">احجز مجدداً</button></div>`)
-          : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="rebook" data-v="${b.salonId}">احجز مجدداً</button></div>`}
+               <button type="button" class="btn ghost" data-act="chat" data-v="${b.salonId}|${b.code}">${I.chat} تواصل</button></div>`)
+          : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="rebook" data-v="${b.salonId}">احجز مجدداً</button>
+               <button type="button" class="btn ghost" data-act="chat" data-v="${b.salonId}|${b.code}">${I.chat} تواصل</button></div>`}
       </article>`;
     }).join("");
     return `<section class="screen">
         ${topbar()}
         <div class="hello"><h1>مواعيدي</h1></div>
+        ${chatsHtml()}
+        ${ordersHtml()}
         ${list.length ? `<div class="bookings">${items}</div>`
           : sessionPhone()
             ? `<div class="empty">${I.cal}<p>لا توجد مواعيد بعد. ستظهر حجوزاتك هنا، ومنها ما يحجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="home">احجز موعدك الأول</button></div>`
             : `<div class="empty">${I.cal}<p>سجّل دخولك برقم جوالك لتظهر مواعيدك، ومنها ما حجزه لك الصالون بالاتصال.</p><button type="button" class="btn" style="flex:none;padding-inline:28px" data-act="profile">تسجيل الدخول</button></div>`}
       </section>${tabbar("mine")}`;
+  }
+
+  function chatsHtml() {
+    if (!sessionPhone()) return "";
+    const ts = Store.threadsOfCustomer(sessionPhone()).filter((t) => !SALON || t.salonId === SALON.id);
+    if (!ts.length) return "";
+    return `<div class="block"><h2 class="section-title">المحادثات</h2>${ts.map((t) => {
+      const s = Store.salon(t.salonId); const last = t.messages[t.messages.length - 1]; const u = Store.unread(t, "customer");
+      return `<button type="button" class="thread-row" data-act="chat" data-v="${t.salonId}|">
+        <span class="monogram sm" style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}" aria-hidden="true">${esc(initials(s.name))}</span>
+        <span class="thread-main"><b>${esc(s.name)}</b><span class="hint">${last.from === "customer" ? "أنت: " : ""}${esc(last.text)}</span></span>
+        ${u ? `<span class="badge-inline num">${u}</span>` : ""}</button>`;
+    }).join("")}</div>`;
+  }
+  function ordersHtml() {
+    if (!sessionPhone()) return "";
+    const os = Store.orders().filter((o) => o.customer.phone === sessionPhone() && (!SALON || o.salonId === SALON.id)).reverse();
+    if (!os.length) return "";
+    return `<div class="block"><h2 class="section-title">طلبات المنتجات</h2>${os.map((o) => {
+      const s = Store.salon(o.salonId);
+      return `<article class="booking"><div class="booking-head"><div><h3>${esc(s.name)}</h3>
+        <p class="hint">${o.items.map((x) => `${esc(x.name)} × ${x.qty}`).join("، ")}</p></div>
+        <span class="status ${o.status === "ready" ? "upcoming" : o.status === "cancelled" ? "cancelled" : "past"}">${Store.ORDER_STATES[o.status]}</span></div>
+        <div class="meta"><span>رقم الطلب <b class="num" dir="ltr">${o.id}</b></span><span class="num">${money(o.total)}</span>${o.bookingCode ? `<span>مع موعدك</span>` : ""}</div></article>`;
+    }).join("")}</div>`;
   }
 
   function tabbar(active) {
@@ -748,8 +892,15 @@
 
   /* ---------- العرض ---------- */
   function render() {
-    applyBrand(SALON || (state.view === "book" || state.view === "done" ? salon() : null));
-    $app.innerHTML = { splash: viewSplash, home: viewHome, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile }[state.view]();
+    const brandOf = { book: () => salon(), done: () => salon(), salon: () => Store.salon(state.openSalon), chat: () => state.chat && Store.salon(state.chat.salonId), cart: () => Store.salon(state.cart.salonId) };
+    applyBrand(SALON || (brandOf[state.view] ? brandOf[state.view]() : null));
+    $app.innerHTML = { splash: viewSplash, home: viewHome, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile,
+      salon: () => viewSalonHome(Store.salon(state.openSalon), true), chat: viewChat, cart: viewCart }[state.view]();
+    if (state.view === "chat") {
+      const box = document.getElementById("messages"); if (box) box.scrollTop = box.scrollHeight;
+      window.scrollTo(0, document.body.scrollHeight);
+      if (state.chat && state.chat.focus) { const i = document.getElementById("chat-input"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+    }
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta && state.view === "splash") meta.setAttribute("content", SALON ? SALON.brand.primary : "#0E4F4A");
   }
@@ -810,9 +961,32 @@
     const v = el.dataset.v;
     switch (el.dataset.act) {
       case "filter": state.filter = v; render(); break;
-      case "salon": startBooking(v); break;
+      case "salon": state.bookFrom = state.view; startBooking(v); break;
+      case "open-salon": state.openSalon = v; go("salon"); break;
+      case "chat": { const [sid, code] = v.split("|"); state.chat = { salonId: sid, bookingCode: code || null, draft: "", from: state.view, focus: false }; go("chat"); break; }
+      case "chat-quick": sendChat(v); break;
+      case "cart-add": case "cart-dec": {
+        const cur = state.view === "cart" ? Store.salon(state.cart.salonId) : (SALON || Store.salon(state.openSalon));
+        const pr = cur.products.find((x) => x.id === v);
+        if (state.cart.salonId !== cur.id) state.cart = { salonId: cur.id, items: {}, note: "", booking: "" };
+        const n = (state.cart.items[v] || 0) + (el.dataset.act === "cart-add" ? 1 : -1);
+        if (n <= 0) delete state.cart.items[v]; else if (pr && pr.inStock) state.cart.items[v] = Math.min(n, 20);
+        render(); break;
+      }
+      case "cart-open": go("cart"); break;
+      case "order": {
+        const s2 = Store.salon(state.cart.salonId);
+        const items = Object.entries(state.cart.items).map(([id, n]) => { const pr = s2.products.find((x) => x.id === id); return pr && pr.inStock ? { id, name: pr.name, price: pr.price, qty: n } : null; }).filter(Boolean);
+        if (!items.length) { toast("السلة فارغة"); break; }
+        const p = loadProfile();
+        const o = Store.addOrder({ id: "OR-" + makeCode().slice(3, 8), salonId: s2.id, customer: { name: p.name || state.cust.name || "", phone: sessionPhone() },
+          items, total: items.reduce((a, x) => a + x.price * x.qty, 0), bookingCode: state.cart.booking || null, note: state.cart.note.trim(), status: "new", createdAt: new Date().toISOString() });
+        Store.upsertCustomer({ phone: sessionPhone(), name: o.customer.name, via: "app", salonId: s2.id });
+        state.cart = { salonId: null, items: {}, note: "", booking: "" };
+        toast(`وصل طلبك ${o.id} للصالون، وستجد حالته في "مواعيدي"`); go("mine"); break;
+      }
       case "rebook": startBooking(v); break;
-      case "salon-svc": if (Store.isLive(SALON)) startBooking(SALON.id, v); else toast("الحجز متوقف مؤقتاً"); break;
+      case "salon-svc": { const cur = SALON || Store.salon(state.openSalon); state.bookFrom = state.view; if (Store.isLive(cur)) startBooking(cur.id, v); else toast("الحجز متوقف مؤقتاً"); break; }
       case "home": go("home"); break;
       case "mine": go("mine"); break;
       case "profile": go("profile"); break;
@@ -848,7 +1022,10 @@
         saveBookings([]); saveProfile({ name: "", phone: "", email: "", pref: "all", since: new Date().toISOString() });
         state.clearAsk = false; render(); toast("تم حذف بياناتك من هذا الجهاز"); break;
       case "back":
-        if (state.step > 0) { state.step--; render(); window.scrollTo(0, 0); } else go("home");
+        if (state.view === "salon") { go("home"); break; }
+        if (state.view === "chat") { go(state.chat.from && state.chat.from !== "chat" ? state.chat.from : "home"); break; }
+        if (state.view === "cart") { go(SALON ? "home" : "salon"); break; }
+        if (state.step > 0) { state.step--; render(); window.scrollTo(0, 0); } else go(state.bookFrom === "salon" ? "salon" : "home");
         break;
       case "service": {
         const i = state.services.indexOf(v);
@@ -873,6 +1050,8 @@
 
   /* بيانات العميل في خطوة الدفع */
   $app.addEventListener("input", (e) => {
+    if (e.target.dataset && e.target.dataset.chat && state.chat) { state.chat.draft = e.target.value; return; }
+    if (e.target.dataset && e.target.dataset.cart) { state.cart[e.target.dataset.cart] = e.target.value; return; }
     if (e.target.dataset && e.target.dataset.rateNote) {
       const code = e.target.dataset.rateNote;
       if (!state.rate || state.rate.code !== code) state.rate = { code, salon: null, staff: null, note: "" };
@@ -894,8 +1073,11 @@
     $app.querySelector(state.auth.sent ? '[data-act="auth-verify"]' : '[data-act="auth-send"]')?.click();
   });
 
+  $app.addEventListener("change", (e) => { if (e.target.dataset && e.target.dataset.cart) state.cart[e.target.dataset.cart] = e.target.value; });
+
   /* حفظ بيانات الحساب */
   $app.addEventListener("submit", (e) => {
+    if (e.target.id === "chat-form") { e.preventDefault(); sendChat(document.getElementById("chat-input").value); return; }
     if (e.target.id !== "profile-form") return;
     e.preventDefault();
     const f = e.target;
@@ -932,7 +1114,8 @@
   Store.onChange(() => {
     DATA.salons = Store.salons();
     if (SALON) Object.assign(SALON, Store.salon(SALON.id) || {});
-    if (state.view !== "splash" && state.view !== "book") render();
+    if (state.view === "chat" && state.chat) { const i = document.getElementById("chat-input"); state.chat.focus = !!(i && document.activeElement === i); }
+    if (state.view !== "splash" && state.view !== "book" && state.view !== "cart") render();
   });
   state.here = getItem(HERE_KEY, null);
   state.filter = loadProfile().pref || "all";

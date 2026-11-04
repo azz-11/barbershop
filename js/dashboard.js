@@ -49,9 +49,11 @@
     </header>`;
   }
   function tabs() {
-    const t = (id, icon, label) => `<button type="button" class="tab" data-act="tab" data-v="${id}" ${state.tab === id ? 'aria-current="page"' : ""}>${icon}${label}</button>`;
-    return `<nav class="tabbar" aria-label="أقسام اللوحة"><div class="tabbar-inner tabs-4">
-      ${t("bookings", I.cal, "الحجوزات")}${t("services", I.list, "الخدمات")}${t("team", I.team, "الفريق")}${t("settings", I.gear, "الإعدادات")}
+    const t = (id, icon, label, n) => `<button type="button" class="tab" data-act="tab" data-v="${id}" ${state.tab === id ? 'aria-current="page"' : ""}>${icon}${label}${n ? `<span class="badge num">${n}</span>` : ""}</button>`;
+    const unread = Store.threadsOf(state.salonId).reduce((a, x) => a + Store.unread(x, "salon"), 0);
+    const newOrders = Store.orders(state.salonId).filter((o) => o.status === "new").length;
+    return `<nav class="tabbar" aria-label="أقسام اللوحة"><div class="tabbar-inner tabs-5">
+      ${t("bookings", I.cal, "الحجوزات")}${t("messages", I.msg, "الرسائل", unread)}${t("services", I.list, "القائمة", newOrders)}${t("team", I.team, "الفريق")}${t("settings", I.gear, "الإعدادات")}
     </div></nav>`;
   }
 
@@ -323,7 +325,101 @@
     </form>`;
   }
 
+  function menuSeg(s) {
+    const n = Store.orders(s.id).filter((o) => o.status === "new").length;
+    return `<div class="segments" role="group" aria-label="القائمة">
+      <button type="button" data-act="menu" data-v="services" aria-pressed="${state.menu !== "products"}">الخدمات</button>
+      <button type="button" data-act="menu" data-v="products" aria-pressed="${state.menu === "products"}">المنتجات والطلبات${n ? ` <span class="num">(${n})</span>` : ""}</button></div>`;
+  }
+
+  /* ---------- المنتجات وطلباتها ---------- */
+  function productForm(pr, s) {
+    const cats = [...new Set([...(window.ENAYATI_DATA.productCategories[s.type] || []), ...s.products.map((x) => x.category).filter(Boolean)])];
+    return `<form class="card form" id="product-form" data-id="${pr ? esc(pr.id) : "new"}" novalidate>
+      <b>${pr ? "تعديل المنتج" : "منتج جديد"}</b>
+      <label for="pr-name">اسم المنتج</label><input id="pr-name" name="name" value="${esc(pr?.name || "")}" placeholder="${s.type === "men" ? "مثال: زيت اللحية" : "مثال: رموش طبيعية"}">
+      <div class="two">
+        <div><label for="pr-price">السعر (ر.س)</label><input id="pr-price" name="price" type="number" min="0" inputmode="numeric" value="${pr ? pr.price : ""}"></div>
+        <div><label for="pr-cat">القسم</label><input id="pr-cat" name="category" list="pr-cats" value="${esc(pr?.category || cats[0] || "")}"></div>
+      </div>
+      <datalist id="pr-cats">${cats.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+      <label for="pr-desc">وصف قصير (اختياري)</label><input id="pr-desc" name="desc" value="${esc(pr?.desc || "")}" placeholder="الحجم، اللون، الاستخدام">
+      <label class="day-check inline"><input type="checkbox" name="inStock" ${!pr || pr.inStock ? "checked" : ""}><span>متوفر</span></label>
+      <p class="field-error" id="pr-err" hidden>اكتب اسم المنتج وسعره.</p>
+      <div class="booking-actions"><button type="submit" class="btn">حفظ</button><button type="button" class="btn ghost" data-act="edit" data-v="">إلغاء</button></div>
+    </form>`;
+  }
+
+  function viewProducts(s) {
+    const orders = Store.orders(s.id).slice().reverse();
+    const open = orders.filter((o) => o.status === "new" || o.status === "ready");
+    const orderCard = (o) => `<article class="booking">
+      <div class="booking-head"><div class="when-big"><b class="num" dir="ltr">${o.id}</b><span>${fmtDate(o.createdAt.slice(0, 10), { day: "numeric", month: "short" })}${o.bookingCode ? " · مع موعده" : " · يمرّ للاستلام"}</span></div>
+        <span class="status ${o.status === "new" ? "noshow" : o.status === "ready" ? "upcoming" : o.status === "done" ? "completed" : "cancelled"}">${Store.ORDER_STATES[o.status]}</span></div>
+      <div class="cust"><b>${esc(o.customer.name || "عميل")}</b><span class="num" dir="ltr">${esc(o.customer.phone)}</span></div>
+      <p class="hint">${o.items.map((x) => `${esc(x.name)} × <span class="num">${x.qty}</span>`).join("، ")} · <b class="num">${money(o.total)}</b>${o.note ? ` · "${esc(o.note)}"` : ""}</p>
+      ${o.status === "new" ? `<div class="booking-actions"><button type="button" class="btn" data-act="o-ready" data-v="${o.id}">جاهز للاستلام</button><button type="button" class="btn ghost" data-act="o-cancel" data-v="${o.id}">إلغاء</button></div>`
+        : o.status === "ready" ? `<div class="booking-actions"><button type="button" class="btn" data-act="o-done" data-v="${o.id}">تم الاستلام والدفع</button><button type="button" class="btn ghost" data-act="o-cancel" data-v="${o.id}">إلغاء</button></div>` : ""}
+    </article>`;
+    const rows = s.products.map((pr) => state.edit === pr.id ? productForm(pr, s) : state.ask === "pr:" + pr.id
+      ? `<div class="confirm-box"><p>حذف "${esc(pr.name)}"؟</p><div class="booking-actions"><button type="button" class="btn danger" data-act="pr-del" data-v="${esc(pr.id)}">نعم، احذف</button><button type="button" class="btn ghost" data-act="ask" data-v="">تراجع</button></div></div>`
+      : `<div class="admin-row">
+          <div class="admin-row-main"><b>${esc(pr.name)}</b><span class="hint">${esc(pr.category || "")}${pr.desc ? " · " + esc(pr.desc) : ""}</span></div>
+          <b class="num">${money(pr.price)}</b>
+          <div class="row-actions"><button type="button" class="link" data-act="pr-stock" data-v="${esc(pr.id)}">${pr.inStock ? "متوفر ✓" : "نفد · أعِد توفيره"}</button><button type="button" class="link" data-act="edit" data-v="${esc(pr.id)}">تعديل</button><button type="button" class="link danger-text" data-act="ask" data-v="pr:${esc(pr.id)}">حذف</button></div>
+        </div>`).join("");
+    return `<section class="screen">
+        ${header(s)}
+        ${menuSeg(s)}
+        <div class="card sub-card">
+          <div class="sub-head"><div><b>قسم المنتجات في تطبيقك</b><span class="hint">${s.type === "men" ? "أدوات الحلاقة، الكريمات، الزيوت، ومنتجات التصفيف" : "أدوات البديكير والمناكير، الرموش، الأظافر، ومنتجات العناية"}</span></div>
+            <button type="button" class="btn ${s.productsEnabled ? "ghost" : ""}" style="flex:none;padding-inline:16px;min-height:40px" data-act="pr-toggle">${s.productsEnabled ? "إخفاء القسم" : "تفعيل القسم"}</button></div>
+          <p class="hint">${s.productsEnabled ? "✓ القسم ظاهر لعملائك في صفحة الصالون. يطلبون ويستلمون من المحل، والدفع عند الاستلام." : "القسم مخفي حالياً عن العملاء."}</p>
+        </div>
+        ${open.length ? `<div class="block"><h2 class="section-title">طلبات تحتاج متابعة</h2><div class="bookings">${open.map(orderCard).join("")}</div></div>` : ""}
+        <div class="block-head"><h1 class="page-title">المنتجات</h1><span class="hint num">${s.products.length}</span></div>
+        ${state.edit === "new" ? productForm(null, s) : `<button type="button" class="btn wide add-btn" data-act="edit" data-v="new">${I.plus} إضافة منتج</button>`}
+        <div class="admin-list">${rows || `<div class="empty"><p>أضف منتجاتك ليطلبها العملاء من تطبيقك.</p></div>`}</div>
+        ${orders.length > open.length ? `<div class="block"><h2 class="section-title">طلبات سابقة</h2><div class="bookings">${orders.filter((o) => !open.includes(o)).map(orderCard).join("")}</div></div>` : ""}
+      </section>${tabs()}`;
+  }
+
+  /* ---------- الرسائل ---------- */
+  function viewMessages(s) {
+    if (state.thread) {
+      const t = Store.thread(s.id, state.thread);
+      if (t && Store.unread(t, "salon")) Store.markRead(s.id, state.thread, "salon");
+      const cust = Store.customer(state.thread);
+      const next = Store.bookings(s.id).filter((b) => b.customer && b.customer.phone === state.thread && UI.bookingState(b)[0] === "upcoming").sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
+      const quick = ["أهلاً بك، كيف نخدمك؟", "تم، موعدك مؤكد", "نعتذر، الوقت محجوز. هل يناسبك وقت آخر؟", "طلبك جاهز للاستلام"];
+      return `<section class="screen chat-screen">
+        ${header(s)}
+        <div class="block-head"><button type="button" class="link" data-act="thread-close">→ كل الرسائل</button><a class="link" href="tel:${esc(state.thread)}">${I.phone} اتصال</a></div>
+        <div class="cust-chip"><span class="avatar" aria-hidden="true">${esc(((cust && cust.name) || (t && t.name) || "؟").charAt(0))}</span>
+          <div><b>${esc((cust && cust.name) || (t && t.name) || "عميل")}</b><span class="num" dir="ltr">${esc(state.thread)}</span></div>
+          ${next ? `<span class="status upcoming">موعده ${fmtDate(next.date, { day: "numeric", month: "short" })} ${fmtTime(next.time)}</span>` : ""}</div>
+        <div class="messages" id="messages">${(t ? t.messages : []).map((m) => `<div class="msg ${m.from === "salon" ? "me" : "them"}">
+            ${m.bookingCode ? `<span class="msg-ref num" dir="ltr">${esc(m.bookingCode)}</span>` : ""}<p>${esc(m.text)}</p><time class="num">${fmtTime(m.at.slice(11, 16))}</time></div>`).join("")}</div>
+        <div class="quick">${quick.map((q) => `<button type="button" class="chip" data-act="reply-quick" data-v="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+        <form class="chat-form" id="reply-form" novalidate><input id="reply-input" data-reply="1" autocomplete="off" value="${esc(state.draft || "")}" placeholder="اكتب ردك…" aria-label="الرد"><button type="submit" class="btn">إرسال</button></form>
+      </section>${tabs()}`;
+    }
+    const ts = Store.threadsOf(s.id);
+    return `<section class="screen">
+        ${header(s)}
+        <h1 class="page-title">الرسائل</h1>
+        <p class="hint">محادثات عملائك من التطبيق. يرد عليها أي فرد من الفريق، ولا يظهر رقم جوالك الشخصي.</p>
+        ${ts.length ? ts.map((t) => { const last = t.messages[t.messages.length - 1]; const u = Store.unread(t, "salon"); const c = Store.customer(t.phone);
+          return `<button type="button" class="thread-row" data-act="thread" data-v="${esc(t.phone)}">
+            <span class="avatar" aria-hidden="true">${esc(((c && c.name) || t.name || "؟").charAt(0))}</span>
+            <span class="thread-main"><b>${esc((c && c.name) || t.name || t.phone)}</b><span class="hint">${last.from === "salon" ? "أنت: " : ""}${esc(last.text)}</span></span>
+            <span class="thread-side"><time class="hint num">${fmtTime(last.at.slice(11, 16))}</time>${u ? `<span class="badge-inline num">${u}</span>` : ""}</span></button>`; }).join("")
+          : `<div class="empty"><p>لا توجد رسائل بعد. تظهر هنا رسائل عملائك من زر "محادثة" في تطبيقك.</p></div>`}
+      </section>${tabs()}`;
+  }
+
   function viewServices(s) {
+    if (state.menu === "products") return viewProducts(s);
     const rows = s.services.map((sv) => state.edit === sv.id ? serviceForm(sv) : state.ask === "svc:" + sv.id
       ? `<div class="confirm-box"><p>حذف "${esc(sv.name)}"؟ لن تظهر للعملاء بعد الآن.</p><div class="booking-actions">
            <button type="button" class="btn danger" data-act="svc-del" data-v="${esc(sv.id)}">نعم، احذف</button><button type="button" class="btn ghost" data-act="ask" data-v="">تراجع</button></div></div>`
@@ -334,6 +430,7 @@
         </div>`).join("");
     return `<section class="screen">
         ${header(s)}
+        ${menuSeg(s)}
         <div class="block-head"><h1 class="page-title">الخدمات والأسعار</h1><span class="hint num">${s.services.length} خدمة</span></div>
         ${state.edit === "new" ? serviceForm(null) : `<button type="button" class="btn wide add-btn" data-act="edit" data-v="new">${I.plus} إضافة خدمة</button>`}
         <div class="admin-list">${rows || `<div class="empty"><p>لا توجد خدمات بعد. أضف أول خدمة ليتمكن العملاء من الحجز.</p></div>`}</div>
@@ -420,6 +517,17 @@
             ${DAYS.map((d, i) => `<label class="day-check"><input type="checkbox" name="closed" value="${i}" ${(s.closedDays || []).includes(i) ? "checked" : ""}><span>${d}</span></label>`).join("")}
           </fieldset>
 
+          <b class="form-sep">التواصل مع العملاء</b>
+          <div class="two">
+            <div><label for="se-phone">رقم الاتصال</label><input id="se-phone" name="cphone" type="tel" inputmode="tel" dir="ltr" placeholder="05XXXXXXXX" value="${esc((s.contact || {}).phone || "")}"></div>
+            <div><label for="se-wa">رقم واتساب</label><input id="se-wa" name="cwa" type="tel" inputmode="tel" dir="ltr" placeholder="05XXXXXXXX" value="${esc((s.contact || {}).whatsapp || "")}"></div>
+          </div>
+          <fieldset class="days-pick"><legend>الأزرار الظاهرة للعملاء</legend>
+            <label class="day-check"><input type="checkbox" name="cchat" ${(s.contact || {}).chat !== false ? "checked" : ""}><span>محادثة داخل التطبيق</span></label>
+            <label class="day-check"><input type="checkbox" name="ccall" ${(s.contact || {}).call !== false ? "checked" : ""}><span>اتصال</span></label>
+            <label class="day-check"><input type="checkbox" name="cwab" ${(s.contact || {}).wa !== false ? "checked" : ""}><span>واتساب</span></label>
+          </fieldset>
+
           <b class="form-sep">الدخول</b>
           <label for="se-pass">كلمة مرور جديدة (اتركها فارغة لعدم التغيير)</label>
           <input id="se-pass" name="pass" type="password" autocomplete="new-password" minlength="4">
@@ -436,7 +544,12 @@
     UI.applyBrand(s.brand.primary, s.brand.accent);
     document.title = `لوحة ${s.name}`;
     $app.innerHTML = state.tab === "bookings" && state.nb ? viewNewBooking(s)
-      : { bookings: viewBookings, services: viewServices, team: viewTeam, settings: viewSettings }[state.tab](s);
+      : { bookings: viewBookings, messages: viewMessages, services: viewServices, team: viewTeam, settings: viewSettings }[state.tab](s);
+    if (state.tab === "messages" && state.thread) {
+      const box = document.getElementById("messages"); if (box) box.scrollTop = box.scrollHeight;
+      window.scrollTo(0, document.body.scrollHeight);
+      if (state.replyFocus) { const i = document.getElementById("reply-input"); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+    }
   }
   function update(fn, msg) { const s = JSON.parse(JSON.stringify(salon())); fn(s); Store.saveSalon(s); state.edit = null; state.ask = null; render(); if (msg) UI.toast(msg); }
 
@@ -447,7 +560,17 @@
     switch (el.dataset.act) {
       case "toggle-theme": UI.toggleTheme(); render(); break;
       case "logout": try { sessionStorage.removeItem(SESSION); } catch (er) { /* لا شيء */ } state.salonId = null; render(); break;
-      case "tab": state.tab = v; state.edit = null; state.ask = null; render(); window.scrollTo(0, 0); break;
+      case "tab": state.tab = v; state.edit = null; state.ask = null; state.thread = null; render(); window.scrollTo(0, 0); break;
+      case "menu": state.menu = v; state.edit = null; state.ask = null; render(); break;
+      case "thread": state.thread = v; state.draft = ""; state.replyFocus = false; render(); break;
+      case "thread-close": state.thread = null; render(); window.scrollTo(0, 0); break;
+      case "reply-quick": sendReply(v); break;
+      case "pr-toggle": update((x) => { x.productsEnabled = !x.productsEnabled; }, salon().productsEnabled ? "أُخفي قسم المنتجات" : "ظهر قسم المنتجات لعملائك"); break;
+      case "pr-stock": update((x) => { x.products = x.products.map((p) => (p.id === v ? { ...p, inStock: !p.inStock } : p)); }); break;
+      case "pr-del": update((x) => { x.products = x.products.filter((p) => p.id !== v); }, "حُذف المنتج"); break;
+      case "o-ready": Store.updateOrder(v, { status: "ready" }); render(); UI.toast("أُبلغ العميل أن طلبه جاهز"); break;
+      case "o-done": Store.updateOrder(v, { status: "done" }); render(); UI.toast("سُجّل الاستلام"); break;
+      case "o-cancel": Store.updateOrder(v, { status: "cancelled" }); render(); UI.toast("أُلغي الطلب"); break;
       case "filter": state.filter = v; state.ask = null; render(); break;
       case "ask": state.ask = v || null; render(); break;
       case "edit": state.edit = v || null; state.ask = null; render(); { const f = $app.querySelector("form input"); if (f && v) f.focus(); } break;
@@ -474,6 +597,12 @@
     }
   });
 
+  function sendReply(text) {
+    text = String(text || "").trim(); if (!text || !state.thread) return;
+    Store.sendMessage(state.salonId, state.thread, { from: "salon", text });
+    state.draft = ""; state.replyFocus = true; render();
+  }
+
   /* تغيّر خيارات الحجز الهاتفي */
   $app.addEventListener("change", (e) => {
     const f = e.target.form;
@@ -485,6 +614,7 @@
   });
 
   $app.addEventListener("input", (e) => {
+    if (e.target.dataset && e.target.dataset.reply) { state.draft = e.target.value; return; }
     if (e.target.name === "primary" || e.target.name === "accent") {
       const p = document.getElementById("brand-preview");
       p.style.setProperty(e.target.name === "primary" ? "--p" : "--a", e.target.value);
@@ -500,6 +630,18 @@
       state.loginError = ""; state.salonId = s.id; state.tab = "bookings";
       try { sessionStorage.setItem(SESSION, s.id); } catch (er) { /* لا شيء */ }
       render(); return;
+    }
+    if (f.id === "reply-form") { sendReply(f.querySelector("#reply-input").value); return; }
+    if (f.id === "product-form") {
+      const name = f.name.value.trim(), price = Number(f.price.value);
+      if (!name || f.price.value === "" || !(price >= 0)) { document.getElementById("pr-err").hidden = false; return; }
+      const data = { name, price, category: f.category.value.trim() || "منتجات", desc: f.desc.value.trim(), inStock: f.inStock.checked };
+      const id = f.dataset.id;
+      update((x) => {
+        if (id === "new") x.products.push({ id: uid("pr-"), ...data });
+        else x.products = x.products.map((p) => (p.id === id ? { ...p, ...data } : p));
+      }, id === "new" ? "أُضيف المنتج" : "حُفظ المنتج");
+      return;
     }
     if (f.id === "nb-phone-form") {
       const nb = state.nb; const s = salon();
@@ -576,6 +718,10 @@
       const lat = parseFloat(f.lat.value), lng = parseFloat(f.lng.value);
       const loc = f.lat.value.trim() === "" && f.lng.value.trim() === "" ? null : { lat, lng };
       if (loc && !(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) { err.textContent = "إحداثيات الموقع غير صحيحة."; err.hidden = false; return; }
+      for (const [el, label] of [[f.cphone, "رقم الاتصال"], [f.cwa, "رقم واتساب"]]) {
+        const v = normPhone(el.value);
+        if (v && !/^(05\d{8}|0\d{8,9}|9200\d{5})$/.test(v)) { err.textContent = `${label} غير صحيح. اكتبه مثل 05XXXXXXXX.`; err.hidden = false; return; }
+      }
       if (f.pass.value && f.pass.value.length < 4) { err.textContent = "كلمة المرور 4 أحرف على الأقل."; err.hidden = false; return; }
       update((s) => {
         Object.assign(s, {
@@ -587,10 +733,11 @@
           location: loc
         });
         if (f.pass.value) s.password = f.pass.value;
+        s.contact = { phone: normPhone(f.cphone.value), whatsapp: normPhone(f.cwa.value), chat: f.cchat.checked, call: f.ccall.checked, wa: f.cwab.checked };
       }, "حُفظت الإعدادات، وظهرت للعملاء");
     }
   });
 
-  Store.onChange(render);
+  Store.onChange(() => { const i = document.getElementById("reply-input"); state.replyFocus = !!(i && document.activeElement === i); render(); });
   render();
 })();

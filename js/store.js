@@ -9,6 +9,8 @@
    billing    : أسعار الاشتراك والفترة التجريبية وبيانات التحويل البنكي
    customers[]: حسابات العملاء، مفتاحها رقم الجوال المؤكَّد برمز تحقق.
                 يُنشأ الحساب من التطبيق، أو من لوحة الصالون عند الحجز الهاتفي.
+   threads    : المحادثات بين العميل والصالون، مفتاحها "salonId|phone"
+   orders[]   : طلبات منتجات الصالون (استلام ودفع في الصالون)
    otps       : رموز التحقق المؤقتة (في النظام الحقيقي تُرسل SMS ولا تُحفظ إلا مشفّرة على الخادم)
 
    نموذج العمل: كل صالون يشترك شهرياً أو سنوياً، ويحصل على:
@@ -61,14 +63,18 @@ window.Store = (function () {
     /* ترقية: الموقع والأرقام التجريبية من البيانات الأولية، وإزالة النجوم القديمة */
     const base = window.ENAYATI_DATA.salons;
     d.salons.forEach((s) => {
+      if (!s.contact) s.contact = { phone: "", whatsapp: "", call: true, wa: true, chat: true };
       const src = base.find((x) => x.id === s.id);
       delete s.rating; delete s.reviews;
-      if (!src) return;
+      if (!src) { if (!s.products) { s.products = []; s.productsEnabled = false; } return; }
       if (!s.location && src.location) s.location = src.location;
       if (!s.seed && src.seed) s.seed = src.seed;
+      if (!s.products) { s.products = src.products ? JSON.parse(JSON.stringify(src.products)) : []; s.productsEnabled = !!src.productsEnabled; }
       s.staff.forEach((m) => { const sm = src.staff.find((x) => x.id === m.id); if (sm && m.seedCuts == null && sm.seedCuts != null) m.seedCuts = sm.seedCuts; });
     });
     d.otps = d.otps || {};
+    d.threads = d.threads || {};
+    d.orders = d.orders || [];
     d.salons.forEach((s) => {
       if (!s.subscription) s.subscription = makeSub(s.id, s.createdAt, d.billing);
       s.subscription.payments = s.subscription.payments || [];
@@ -100,7 +106,7 @@ window.Store = (function () {
       if (raw && raw === cacheRaw) return cacheData;
       const d = JSON.parse(raw);
       if (d && d.version === 1) {
-        const needs = !d.billing || !d.customers || d.salons.some((s) => !s.subscription || "rating" in s);
+        const needs = !d.billing || !d.customers || !d.threads || !d.orders || d.salons.some((s) => !s.subscription || "rating" in s || !s.contact);
         normalize(d);
         if (needs) { write(d); return d; }
         cacheRaw = raw; cacheData = d; return d;
@@ -279,6 +285,35 @@ window.Store = (function () {
       const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
       return 2 * R * Math.asin(Math.sqrt(h));
     },
+
+    /* ---------- المحادثات ----------
+       محادثة واحدة لكل عميل مع كل صالون. يرد عليها أي فرد من فريق الصالون من اللوحة. */
+    thread: (salonId, phone) => read().threads[salonId + "|" + phone] || null,
+    threadsOf: (salonId) => Object.entries(read().threads).filter(([k]) => k.startsWith(salonId + "|"))
+      .map(([k, t]) => ({ phone: k.split("|")[1], ...t })).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")),
+    threadsOfCustomer: (phone) => Object.entries(read().threads).filter(([k]) => k.endsWith("|" + phone))
+      .map(([k, t]) => ({ salonId: k.split("|")[0], ...t })),
+    sendMessage(salonId, phone, { from, text, name, bookingCode }) {
+      mutate((d) => {
+        const k = salonId + "|" + phone;
+        const t = d.threads[k] || (d.threads[k] = { name: name || "", messages: [], readCustomer: 0, readSalon: 0 });
+        if (name && !t.name) t.name = name;
+        const at = new Date().toISOString();
+        t.messages.push({ from, text, at, bookingCode: bookingCode || null });
+        t.updatedAt = at;
+        if (from === "customer") t.readCustomer = t.messages.length; else t.readSalon = t.messages.length;
+      });
+    },
+    markRead(salonId, phone, side) {
+      mutate((d) => { const t = d.threads[salonId + "|" + phone]; if (t) t[side === "salon" ? "readSalon" : "readCustomer"] = t.messages.length; });
+    },
+    unread(t, side) { return t ? Math.max(0, t.messages.length - (side === "salon" ? t.readSalon : t.readCustomer)) : 0; },
+
+    /* ---------- طلبات المنتجات ---------- */
+    orders: (salonId) => read().orders.filter((o) => !salonId || o.salonId === salonId),
+    addOrder(o) { mutate((d) => { d.orders.push(o); }); return o; },
+    updateOrder(id, patch) { mutate((d) => { d.orders = d.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)); }); },
+    ORDER_STATES: { new: "طلب جديد", ready: "جاهز للاستلام", done: "تم الاستلام", cancelled: "ملغى" },
 
     /* الحجوزات */
     bookings: (salonId) => read().bookings.filter((b) => !salonId || b.salonId === salonId),

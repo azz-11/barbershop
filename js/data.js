@@ -24,6 +24,13 @@ window.ENAYATI_DATA = {
         { id: "kids", name: "حلاقة أطفال", desc: "حتى عمر ١٢ سنة", min: 30, price: 40 },
         { id: "facial", name: "تنظيف بشرة", desc: "تقشير وقناع طين", min: 35, price: 75 }
       ],
+      productsEnabled: true,
+      products: [
+        { id: "beard-oil", name: "زيت اللحية بخلاصة الأرغان", category: "عناية باللحية", price: 45, desc: "30 مل · يرطّب ويلمّع", inStock: true },
+        { id: "pomade", name: "شمع تصفيف لامع", category: "تصفيف الشعر", price: 38, desc: "ثبات قوي طوال اليوم", inStock: true },
+        { id: "aftershave", name: "بلسم ما بعد الحلاقة", category: "كريمات وزيوت", price: 32, desc: "يهدّئ البشرة بعد الموس", inStock: true },
+        { id: "comb", name: "مشط خشب للّحية", category: "أدوات حلاقة", price: 25, desc: "خشب الصندل", inStock: false }
+      ],
       staff: [
         { id: "a", name: "أبو فهد", role: "حلاق أول", years: 14, seedCuts: 612 },
         { id: "b", name: "سلمان", role: "مختص لحية", years: 7, seedCuts: 401 },
@@ -49,6 +56,11 @@ window.ENAYATI_DATA = {
         { id: "cut", name: "قص شعر", desc: "قص وتصفيف", min: 35, price: 55 },
         { id: "beard", name: "تحديد لحية", desc: "خط ناعم بالموس", min: 20, price: 35 },
         { id: "color", name: "صبغة رجالية", desc: "تغطية الشيب", min: 40, price: 85 }
+      ],
+      productsEnabled: true,
+      products: [
+        { id: "clay", name: "طين تصفيف مطفي", category: "تصفيف الشعر", price: 42, desc: "مظهر طبيعي بدون لمعة", inStock: true },
+        { id: "trimmer", name: "ماكينة تحديد لاسلكية", category: "أدوات حلاقة", price: 189, desc: "للاستخدام المنزلي", inStock: true }
       ],
       staff: [
         { id: "a", name: "ماجد", role: "مختص تدرّج", years: 9, seedCuts: 455 },
@@ -76,6 +88,13 @@ window.ENAYATI_DATA = {
         { id: "nails", name: "مناكير وبديكير", desc: "تنظيف وطلاء جل", min: 75, price: 160 },
         { id: "makeup", name: "مكياج سهرة", desc: "مكياج كامل مع رموش", min: 60, price: 300 }
       ],
+      productsEnabled: true,
+      products: [
+        { id: "lashes", name: "رموش طبيعية (٣ أزواج)", category: "الرموش", price: 55, desc: "قابلة لإعادة الاستخدام", inStock: true },
+        { id: "gel-polish", name: "طلاء أظافر جل", category: "الأظافر", price: 48, desc: "١٢ لوناً متوفراً", inStock: true },
+        { id: "pedicure-kit", name: "مجموعة البديكير المنزلية", category: "أدوات البديكير والمناكير", price: 120, desc: "مبرد، دافع جلد، مقص", inStock: true },
+        { id: "hair-mask", name: "ماسك ترميم الشعر", category: "العناية بالشعر", price: 85, desc: "للشعر المصبوغ", inStock: false }
+      ],
       staff: [
         { id: "a", name: "مها", role: "مختصة شعر", years: 12, seedCuts: 820 },
         { id: "b", name: "نوف", role: "مختصة مكياج", years: 6, seedCuts: 480 },
@@ -101,6 +120,11 @@ window.ENAYATI_DATA = {
         { id: "protein", name: "بروتين", desc: "علاج وفرد الشعر", min: 150, price: 550 },
         { id: "blow", name: "استشوار", desc: "تجفيف وتصفيف", min: 40, price: 100 },
         { id: "brows", name: "رسم حواجب", desc: "تحديد بالخيط", min: 20, price: 50 }
+      ],
+      productsEnabled: true,
+      products: [
+        { id: "serum", name: "سيروم فيتامين سي", category: "العناية بالبشرة", price: 95, desc: "30 مل · لنضارة البشرة", inStock: true },
+        { id: "brow-kit", name: "مجموعة تحديد الحواجب", category: "الرموش والحواجب", price: 60, desc: "قلم + جل + فرشاة", inStock: true }
       ],
       staff: [
         { id: "a", name: "لولوة", role: "مختصة بشرة", years: 10, seedCuts: 530 },
@@ -154,6 +178,11 @@ window.ENAYATI_DATA = {
       ]
     }
   ],
+  /* أقسام مقترحة للمنتجات حسب نوع الصالون (يستطيع الصالون كتابة قسم آخر) */
+  productCategories: {
+    men: ["أدوات حلاقة", "عناية باللحية", "كريمات وزيوت", "تصفيف الشعر", "العناية بالبشرة"],
+    women: ["أدوات البديكير والمناكير", "الأظافر", "الرموش والحواجب", "الرموش", "العناية بالبشرة", "العناية بالشعر", "المكياج"]
+  },
   payments: [
     { id: "applepay", name: "Apple Pay", note: "دفع فوري من جوالك" },
     { id: "mada", name: "مدى / بطاقة ائتمانية", note: "Visa · Mastercard · مدى" },
