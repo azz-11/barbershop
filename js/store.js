@@ -460,7 +460,8 @@ window.Store = (function () {
       return b ? rescheduleSlots(d, b, date, sameStaff) : [];
     },
     /* ينقل الموعد بعد التحقق من المهلة ومن أن الوقت ما زال متاحاً. العربون وسياسة الإلغاء يبقيان كما هما */
-    rescheduleBooking(code, { date, time, staffId }) {
+    /* by: "customer" من التطبيق، أو "salon" من لوحة الصالون */
+    rescheduleBooking(code, { date, time, staffId, by }) {
       let res = { error: "invalid" };
       mutate((d) => {
         const b = d.bookings.find((x) => x.code === code);
@@ -470,7 +471,7 @@ window.Store = (function () {
         const s = d.salons.find((x) => x.id === b.salonId);
         const staff = s.staff.find((p) => p.id === staffId);
         const from = { date: b.date, time: b.time, staffId: b.staffId, staffName: b.staffName };
-        b.rescheduled = [...(b.rescheduled || []), { from, at: new Date().toISOString() }];
+        b.rescheduled = [...(b.rescheduled || []), { from, by: by || "customer", at: new Date().toISOString() }];
         Object.assign(b, { date, time, staffId: staff.id, staffName: staff.name });
         res = { ok: true, from, booking: clone(b) };
       });

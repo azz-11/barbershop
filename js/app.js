@@ -918,7 +918,7 @@
         <div class="booking-when">${I.cal}<span>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></span></div>
         <div class="meta"><span>رقم الحجز <b class="num" style="direction:ltr;display:inline-block">${b.code}</b></span><span class="num">${money(b.total)}</span></div>
         ${b.status === "completed" ? rateBox(b, s) : ""}
-        ${b.rescheduled && b.rescheduled.length ? `<p class="policy-line">نُقل من ${movedFrom(b)}</p>` : ""}
+        ${b.rescheduled && b.rescheduled.length ? `<p class="policy-line">${b.rescheduled[b.rescheduled.length - 1].by === "salon" ? "نقله الصالون" : "نُقل"} من ${movedFrom(b)}</p>` : ""}
         ${cls === "upcoming" ? bookingExtras(b, s) : ""}
         ${b.status === "cancelled" && b.deposit ? `<p class="policy-line">العربون: ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")}</p>` : ""}
         ${cls === "upcoming" ? (asking
@@ -1294,7 +1294,7 @@
       case "rs-time": { const [t, sid] = v.split("|"); state.rs.time = t; state.rs.staffId = sid; render(); document.querySelector('[data-act="rs-confirm"]')?.scrollIntoView({ block: "nearest" }); break; }
       case "rs-confirm": {
         const r = state.rs;
-        const res = Store.rescheduleBooking(r.code, { date: r.date, time: r.time, staffId: r.staffId });
+        const res = Store.rescheduleBooking(r.code, { date: r.date, time: r.time, staffId: r.staffId, by: "customer" });
         if (res.error) {
           toast(res.error === "too-late" ? "لا يمكن تغيير الموعد قبل أقل من ساعتين منه" : "هذا الوقت لم يعد متاحاً. اختر وقتاً آخر");
           r.time = null; render(); break;

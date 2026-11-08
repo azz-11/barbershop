@@ -244,6 +244,65 @@
     </div>`;
   }
 
+  /* ---------- تغيير موعد عميل (تقديم أو تأخير) ----------
+     بنفس قواعد التطبيق: حتى ساعتين قبل الموعد، وبدون تعارض. ويُبلَّغ العميل برسالة نصية وفي المحادثة. */
+  function viewDashResched(s) {
+    const r = state.rsd;
+    const b = Store.bookings(s.id).find((x) => x.code === r.code);
+    const staffWord = s.type === "men" ? "الحلاق" : "المختصة";
+    const head = `${header(s)}<div class="block-head"><h1 class="page-title">تغيير الموعد</h1><button type="button" class="link" data-act="rsd-close">${r.done ? "العودة للحجوزات" : "إلغاء"}</button></div>`;
+    if (r.done) {
+      const nb = r.done.booking;
+      return `<section class="screen">${head}
+        <div class="card sub-card done-card">
+          <b>نُقل الموعد ✓</b>
+          <div class="row"><span>العميل</span><span>${esc(nb.customer?.name || "عميل")}</span></div>
+          <div class="row"><span>كان</span><span>${fmtDate(r.done.from.date, { weekday: "short", day: "numeric", month: "short" })} · <span class="num">${fmtTime(r.done.from.time)}</span></span></div>
+          <div class="row"><span>أصبح</span><span>${fmtDate(nb.date, { weekday: "short", day: "numeric", month: "short" })} · <span class="num">${fmtTime(nb.time)}</span></span></div>
+          <div class="row"><span>${staffWord}</span><span>${esc(nb.staffName)}</span></div>
+        </div>
+        ${r.done.sms ? smsBox(r.done.sms) : ""}
+        <p class="hint">${nb.customer?.phone ? "وأُرسلت له الرسالة نفسها في محادثة التطبيق." : "لا يوجد رقم جوال لهذا الحجز، فأبلغ العميل بنفسك."}</p>
+        <button type="button" class="btn wide" data-act="rsd-close">العودة للحجوزات</button>
+      </section>${tabs()}`;
+    }
+    if (!b || !Store.canReschedule(b)) {
+      return `<section class="screen">${head}<div class="empty"><p>لا يمكن تغيير هذا الموعد الآن. التقديم والتأخير متاحان حتى ساعتين قبل الموعد.</p></div></section>${tabs()}`;
+    }
+    const days = nbDays(s);
+    if (!r.date || !days.includes(r.date)) r.date = days.includes(b.date) ? b.date : days[0];
+    const slots = Store.rescheduleSlots(b.code, r.date, r.same);
+    if (r.time && !slots.some((x) => x.time === r.time && x.staff.id === r.staffId)) { r.time = null; r.staffId = null; }
+    const btn = (x) => `<button type="button" role="radio" class="slot rs-slot" data-act="rsd-time" data-v="${x.time}|${x.staff.id}" aria-checked="${r.time === x.time && r.staffId === x.staff.id}">
+        <span class="num">${fmtTime(x.time)}</span>${r.same ? "" : `<small>${esc(x.staff.name)}</small>`}</button>`;
+    const same = r.date === b.date;
+    const earlier = same ? slots.filter((x) => x.time < b.time) : [];
+    const later = same ? slots.filter((x) => x.time >= b.time) : slots;
+    const group = (t, list) => list.length ? `<div class="period"><h4>${t}</h4><div class="slots" role="radiogroup" aria-label="${t}">${list.map(btn).join("")}</div></div>` : "";
+    const picked = r.staffId && s.staff.find((p) => p.id === r.staffId);
+    return `<section class="screen">${head}
+        <div class="card current-appt">
+          <span class="hint">الموعد الحالي</span>
+          <b>${esc(b.customer?.name || "عميل")} · ${fmtDate(b.date, { weekday: "long", day: "numeric", month: "short" })} · <span class="num">${fmtTime(b.time)}</span></b>
+          <span class="hint">${b.serviceNames.map(esc).join("، ")} · ${staffWord}: ${esc(b.staffName)}${b.deposit && b.deposit.status === "paid" ? ` · عربون <span class="num">${money(b.deposit.amount)}</span> مدفوع` : ""}</span>
+        </div>
+        <div class="segments" role="group" aria-label="${staffWord}">
+          <button type="button" data-act="rsd-same" data-v="1" aria-pressed="${r.same}">مع ${esc(b.staffName)}</button>
+          <button type="button" data-act="rsd-same" data-v="0" aria-pressed="${!r.same}">أي ${s.type === "men" ? "حلاق" : "مختصة"} متاح</button>
+        </div>
+        <label class="hint" for="rsd-date">اليوم</label>
+        <select id="rsd-date" class="rsd-date" data-rsd="date">${days.map((d) => `<option value="${d}" ${r.date === d ? "selected" : ""}>${fmtDate(d, { weekday: "long", day: "numeric", month: "short" })}${d === b.date ? " (يوم الموعد الحالي)" : ""}</option>`).join("")}</select>
+        ${slots.length ? (same ? `${group("أبكر", earlier)}${group("أبعد", later)}` : group("الأوقات المتاحة", later))
+          : `<div class="empty"><p>لا توجد أوقات متاحة في هذا اليوم${r.same ? ` مع ${esc(b.staffName)}. جرّب "أي ${s.type === "men" ? "حلاق" : "مختصة"} متاح"` : ""}.</p></div>`}
+        ${r.time ? `<div class="card new-appt">
+            <span class="hint">الموعد الجديد</span>
+            <b>${fmtDate(r.date, { weekday: "long", day: "numeric", month: "short" })} · <span class="num">${fmtTime(r.time)}</span></b>
+            <span class="hint">${staffWord}: ${esc(picked ? picked.name : "")}${b.customer?.phone ? " · سيصل العميل إشعار بالتغيير" : ""}</span>
+          </div>
+          <button type="button" class="btn wide" data-act="rsd-confirm">تأكيد الموعد الجديد</button>` : ""}
+      </section>${tabs()}`;
+  }
+
   /* سجل الالتزام: "حضر 8 من 9"، وشارة تنبيه لمن غاب مرتين أو أكثر */
   const timesText = (n) => (n === 1 ? "مرة" : n === 2 ? "مرتين" : n <= 10 ? `${n} مرات` : `${n} مرة`);
   function relLine(salonId, phone) {
@@ -323,9 +382,10 @@
         ? `<div class="confirm-box"><p>إلغاء حجز ${esc(b.customer?.name || "العميل")}؟</p><div class="booking-actions">
              <button type="button" class="btn danger" data-act="b-cancel" data-v="${b.code}">نعم، ألغِ</button>
              <button type="button" class="btn ghost" data-act="ask" data-v="">تراجع</button></div></div>`
-        : `<div class="booking-actions">
+        : `<div class="booking-actions wrap">
              <button type="button" class="btn" data-act="b-done" data-v="${b.code}">تم</button>
              <button type="button" class="btn ghost" data-act="b-noshow" data-v="${b.code}">لم يحضر</button>
+             ${Store.canReschedule(b) ? `<button type="button" class="btn ghost" data-act="rsd-start" data-v="${b.code}">تغيير الموعد</button>` : ""}
              <button type="button" class="btn ghost" data-act="ask" data-v="cancel:${b.code}">إلغاء</button></div>`;
       return `<article class="booking">
         <div class="booking-head">
@@ -338,7 +398,7 @@
         </div>
         ${relLine(s.id, b.customer && b.customer.phone)}
         ${b.rescheduled && b.rescheduled.length ? (() => { const f = b.rescheduled[b.rescheduled.length - 1].from;
-          return `<p class="rel-line"><span class="src-tag">عُدّل الموعد</span> كان ${fmtDate(f.date, { weekday: "short", day: "numeric", month: "short" })} ${fmtTime(f.time)}${f.staffName !== b.staffName ? ` مع ${esc(f.staffName)}` : ""}</p>`; })() : ""}
+          return `<p class="rel-line"><span class="src-tag">${b.rescheduled[b.rescheduled.length - 1].by === "salon" ? "عدّله الصالون" : "عدّله العميل"}</span> كان ${fmtDate(f.date, { weekday: "short", day: "numeric", month: "short" })} ${fmtTime(f.time)}${f.staffName !== b.staffName ? ` مع ${esc(f.staffName)}` : ""}</p>`; })() : ""}
         <p class="hint">${b.source === "phone" ? '<span class="src-tag">حجز هاتفي</span> ' : ""}${b.serviceNames.map(esc).join("، ")} · ${esc(b.staffName)} · <span class="num">${money(b.total)}</span> · ${b.deposit ? `عربون <span class="num">${money(b.deposit.amount)}</span> ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")} · الباقي <span class="num">${money(Math.max(0, b.total - b.deposit.amount))}</span> في الصالون` : b.payment === "cash" ? "دفع في الصالون" : "مدفوع"}${b.lateCancel ? ' · <span class="src-tag warn">إلغاء متأخر</span>' : ""}</p>
         ${b.feedback ? `<div class="fb fb-${b.feedback.salon}"><span>تقييم العميل: الصالون <b>${Store.VERDICTS[b.feedback.salon]}</b> · ${esc(b.staffName)} <b>${Store.VERDICTS[b.feedback.staff]}</b></span>${b.feedback.note ? `<span>"${esc(b.feedback.note)}"</span>` : ""}</div>` : ""}
         ${actions}
@@ -638,7 +698,8 @@
     if (!s) { state.salonId = null; UI.applyBrand(null, null); $app.innerHTML = viewLogin(); return; }
     UI.applyBrand(s.brand.primary, s.brand.accent);
     document.title = `لوحة ${s.name}`;
-    $app.innerHTML = state.tab === "bookings" && state.nb ? viewNewBooking(s)
+    $app.innerHTML = state.tab === "bookings" && state.rsd ? viewDashResched(s)
+      : state.tab === "bookings" && state.nb ? viewNewBooking(s)
       : { bookings: viewBookings, messages: viewMessages, services: viewServices, team: viewTeam, settings: viewSettings }[state.tab](s);
     if (state.tab === "messages" && state.thread) {
       const box = document.getElementById("messages"); if (box) box.scrollTop = box.scrollHeight;
@@ -655,7 +716,7 @@
     switch (el.dataset.act) {
       case "toggle-theme": UI.toggleTheme(); render(); break;
       case "logout": try { sessionStorage.removeItem(SESSION); } catch (er) { /* لا شيء */ } state.salonId = null; render(); break;
-      case "tab": state.tab = v; state.edit = null; state.ask = null; state.thread = null; render(); window.scrollTo(0, 0); break;
+      case "tab": state.rsd = null; state.tab = v; state.edit = null; state.ask = null; state.thread = null; render(); window.scrollTo(0, 0); break;
       case "menu": state.menu = v; state.edit = null; state.ask = null; render(); break;
       case "thread": state.thread = v; state.draft = ""; state.replyFocus = false; render(); break;
       case "thread-close": state.thread = null; render(); window.scrollTo(0, 0); break;
@@ -671,6 +732,25 @@
       case "edit": state.edit = v || null; state.ask = null; render(); { const f = $app.querySelector("form input"); if (f && v) f.focus(); } break;
       case "go-sub": state.tab = "settings"; state.edit = null; render(); document.getElementById("subscription")?.scrollIntoView({ block: "start" }); break;
       case "plan": state.plan = v; render(); document.getElementById("renew-form")?.scrollIntoView({ block: "nearest" }); break;
+      case "rsd-start": state.rsd = { code: v, date: null, same: true, time: null, staffId: null, done: null }; state.ask = null; render(); window.scrollTo(0, 0); break;
+      case "rsd-close": state.rsd = null; render(); window.scrollTo(0, 0); break;
+      case "rsd-same": state.rsd.same = v === "1"; state.rsd.time = null; render(); break;
+      case "rsd-time": { const [t, sid] = v.split("|"); state.rsd.time = t; state.rsd.staffId = sid; render(); document.querySelector('[data-act="rsd-confirm"]')?.scrollIntoView({ block: "nearest" }); break; }
+      case "rsd-confirm": {
+        const r = state.rsd; const sl = salon();
+        const res = Store.rescheduleBooking(r.code, { date: r.date, time: r.time, staffId: r.staffId, by: "salon" });
+        if (res.error) {
+          UI.toast(res.error === "too-late" ? "لا يمكن تغيير الموعد قبل أقل من ساعتين منه" : "هذا الوقت لم يعد متاحاً. اختر وقتاً آخر");
+          r.time = null; render(); break;
+        }
+        const nb = res.booking;
+        const was = `${fmtDate(res.from.date, { weekday: "long", day: "numeric", month: "long" })} الساعة ${fmtTime(res.from.time)}`;
+        const now = `${fmtDate(nb.date, { weekday: "long", day: "numeric", month: "long" })} الساعة ${fmtTime(nb.time)}`;
+        const text = `${sl.name}: تم تغيير موعدك ${nb.code} من ${was} إلى ${now}${res.from.staffId !== nb.staffId ? ` مع ${nb.staffName}` : ""}. للاستفسار تواصل معنا من التطبيق.`;
+        if (nb.customer && nb.customer.phone) Store.sendMessage(sl.id, nb.customer.phone, { from: "salon", text, bookingCode: nb.code });
+        r.done = { booking: nb, from: res.from, sms: nb.customer && nb.customer.phone ? `عناياتي · ${text}` : "" };
+        render(); window.scrollTo(0, 0); UI.toast("نُقل الموعد، وأُبلغ العميل"); break;
+      }
       case "nb-start": state.nb = newNb(); render(); window.scrollTo(0, 0); document.getElementById("nb-phone")?.focus(); break;
       case "nb-close": state.nb = null; render(); break;
       case "nb-back": state.nb.step = "phone"; state.nb.error = ""; render(); break;
@@ -723,6 +803,7 @@
 
   /* تغيّر خيارات الحجز الهاتفي */
   $app.addEventListener("change", (e) => {
+    if (e.target.dataset && e.target.dataset.rsd === "date" && state.rsd) { state.rsd.date = e.target.value; state.rsd.time = null; render(); return; }
     const f = e.target.form;
     if (!f || f.id !== "nb-book-form" || !state.nb) return;
     const nb = state.nb;
