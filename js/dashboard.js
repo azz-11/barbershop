@@ -337,6 +337,8 @@
           ${b.customer?.phone ? `<span class="num" dir="ltr">${esc(b.customer.phone)}</span>` : ""}
         </div>
         ${relLine(s.id, b.customer && b.customer.phone)}
+        ${b.rescheduled && b.rescheduled.length ? (() => { const f = b.rescheduled[b.rescheduled.length - 1].from;
+          return `<p class="rel-line"><span class="src-tag">عُدّل الموعد</span> كان ${fmtDate(f.date, { weekday: "short", day: "numeric", month: "short" })} ${fmtTime(f.time)}${f.staffName !== b.staffName ? ` مع ${esc(f.staffName)}` : ""}</p>`; })() : ""}
         <p class="hint">${b.source === "phone" ? '<span class="src-tag">حجز هاتفي</span> ' : ""}${b.serviceNames.map(esc).join("، ")} · ${esc(b.staffName)} · <span class="num">${money(b.total)}</span> · ${b.deposit ? `عربون <span class="num">${money(b.deposit.amount)}</span> ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")} · الباقي <span class="num">${money(Math.max(0, b.total - b.deposit.amount))}</span> في الصالون` : b.payment === "cash" ? "دفع في الصالون" : "مدفوع"}${b.lateCancel ? ' · <span class="src-tag warn">إلغاء متأخر</span>' : ""}</p>
         ${b.feedback ? `<div class="fb fb-${b.feedback.salon}"><span>تقييم العميل: الصالون <b>${Store.VERDICTS[b.feedback.salon]}</b> · ${esc(b.staffName)} <b>${Store.VERDICTS[b.feedback.staff]}</b></span>${b.feedback.note ? `<span>"${esc(b.feedback.note)}"</span>` : ""}</div>` : ""}
         ${actions}

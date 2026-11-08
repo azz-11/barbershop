@@ -65,6 +65,7 @@
     calOpen: null,      // رمز الحجز المفتوحة له خيارات التقويم
     qjoin: null,        // { salonId, service, from } حجز الدور عن بُعد
     qLeave: null,       // تأكيد الخروج من الدور
+    rs: null,           // تغيير الموعد: { code, date, same, time, staffId }
     auth: { phone: "", name: "", code: "", sent: false, sms: "", error: "" }
   };
 
@@ -835,6 +836,63 @@
     </div>`;
   }
 
+  /* ---------- تقديم الموعد أو تأخيره ---------- */
+  function movedFrom(b) {
+    const f = b.rescheduled[b.rescheduled.length - 1].from;
+    return `${fmtDate(f.date, { weekday: "long", day: "numeric", month: "short" })} ${fmtTime(f.time)}${f.staffName !== b.staffName ? ` مع ${esc(f.staffName)}` : ""}`;
+  }
+  function viewResched() {
+    const r = state.rs;
+    const b = loadBookings().find((x) => x.code === r.code);
+    const s = b && Store.salon(b.salonId);
+    if (!b || !Store.canReschedule(b)) {
+      return `<section class="screen">${topbar(true, "تغيير الموعد")}
+        <div class="empty"><p>لا يمكن تغيير هذا الموعد الآن. التقديم والتأخير متاحان حتى ساعتين قبل الموعد.</p></div></section>${tabbar("mine")}`;
+    }
+    const base = new Date(); base.setHours(0, 0, 0, 0);
+    const days = Array.from({ length: DAYS_AHEAD }, (_, i) => { const d = new Date(base); d.setDate(base.getDate() + i); return isoDate(d); });
+    const closed = (iso) => (s.closedDays || []).includes(parseISO(iso).getDay());
+    if (!r.date || closed(r.date)) r.date = !closed(b.date) ? b.date : days.find((d) => !closed(d));
+    const slots = closed(r.date) ? [] : Store.rescheduleSlots(b.code, r.date, r.same);
+    if (r.time && !slots.some((x) => x.time === r.time && x.staff.id === r.staffId)) { r.time = null; r.staffId = null; }
+    const staffWord = s.type === "men" ? "الحلاق" : "المختصة";
+    const slotBtn = (x) => `<button type="button" role="radio" class="slot rs-slot" data-act="rs-time" data-v="${x.time}|${x.staff.id}" aria-checked="${r.time === x.time && r.staffId === x.staff.id}">
+        <span class="num">${fmtTime(x.time)}</span>${r.same ? "" : `<small>${esc(x.staff.name)}</small>`}</button>`;
+    const same = r.date === b.date;
+    const earlier = same ? slots.filter((x) => x.time < b.time) : [];
+    const later = same ? slots.filter((x) => x.time > b.time || (x.time === b.time && x.staff.id !== b.staffId)) : slots;
+    const group = (title, list) => list.length ? `<div class="period"><h4>${title}</h4><div class="slots" role="radiogroup" aria-label="${title}">${list.map(slotBtn).join("")}</div></div>` : "";
+    const dayBtns = days.map((iso, i) => {
+      const d = parseISO(iso);
+      const dow = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString(LOCALE, { weekday: "short" });
+      return `<button type="button" role="radio" class="day ${iso === b.date ? "is-current" : ""}" data-act="rs-date" data-v="${iso}" aria-checked="${r.date === iso}" aria-label="${fmtDate(iso)}${iso === b.date ? " (يوم موعدك الحالي)" : ""}${closed(iso) ? " (مغلق)" : ""}" ${closed(iso) ? "disabled" : ""}>
+        <span class="dow">${dow}</span><span class="dnum num">${d.getDate()}</span><span class="mon">${d.toLocaleDateString(LOCALE, { month: "short" })}</span></button>`;
+    }).join("");
+    const pickedStaff = r.staffId && s.staff.find((p) => p.id === r.staffId);
+    return `<section class="screen">
+        ${topbar(true, "تغيير الموعد")}
+        <div class="card current-appt">
+          <span class="hint">موعدك الحالي</span>
+          <b>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></b>
+          <span class="hint">${esc(s.name)} · ${b.serviceNames.map(esc).join("، ")} · ${staffWord}: ${esc(b.staffName)}</span>
+        </div>
+        <div class="segments" role="group" aria-label="${staffWord}">
+          <button type="button" data-act="rs-same" data-v="1" aria-pressed="${r.same}">مع ${esc(b.staffName)}</button>
+          <button type="button" data-act="rs-same" data-v="0" aria-pressed="${!r.same}">أي ${s.type === "men" ? "حلاق" : "مختصة"} متاح</button>
+        </div>
+        <div class="days" role="radiogroup" aria-label="اليوم">${dayBtns}</div>
+        ${slots.length ? (same ? `${group("أبكر من موعدك", earlier)}${group("أبعد من موعدك", later)}` : group("الأوقات المتاحة", later))
+          : `<div class="empty">${I.cal}<p>لا توجد أوقات متاحة في هذا اليوم${r.same ? `، جرّب "أي ${s.type === "men" ? "حلاق" : "مختصة"} متاح" أو يوماً آخر` : ". جرّب يوماً آخر"}.</p></div>`}
+        ${r.time ? `<div class="card new-appt">
+            <span class="hint">الموعد الجديد</span>
+            <b>${fmtDate(r.date)} · <span class="num">${fmtTime(r.time)}</span></b>
+            <span class="hint">${staffWord}: ${esc(pickedStaff ? pickedStaff.name : "")}${b.deposit && b.deposit.status === "paid" ? " · يبقى عربونك المدفوع كما هو" : ""}</span>
+            <span class="policy-line">${policyText(b.policy ? b.policy.cancelHours : Store.cancelHours(s))} الجديد.</span>
+          </div>
+          <button type="button" class="btn wide" data-act="rs-confirm">تأكيد الموعد الجديد</button>` : ""}
+      </section>${tabbar("mine")}`;
+  }
+
   /* نص تأكيد الإلغاء حسب المهلة والعربون */
   function cancelPrompt(b) {
     const hours = b.policy ? b.policy.cancelHours : Store.cancelHours(Store.salon(b.salonId));
@@ -860,14 +918,18 @@
         <div class="booking-when">${I.cal}<span>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></span></div>
         <div class="meta"><span>رقم الحجز <b class="num" style="direction:ltr;display:inline-block">${b.code}</b></span><span class="num">${money(b.total)}</span></div>
         ${b.status === "completed" ? rateBox(b, s) : ""}
+        ${b.rescheduled && b.rescheduled.length ? `<p class="policy-line">نُقل من ${movedFrom(b)}</p>` : ""}
         ${cls === "upcoming" ? bookingExtras(b, s) : ""}
         ${b.status === "cancelled" && b.deposit ? `<p class="policy-line">العربون: ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")}</p>` : ""}
         ${cls === "upcoming" ? (asking
           ? `<div class="confirm-box"><p>${cancelPrompt(b)}</p><div class="booking-actions">
                <button type="button" class="btn danger" data-act="cancel-yes" data-v="${b.code}">نعم، ألغِ الموعد</button>
                <button type="button" class="btn ghost" data-act="cancel-no">تراجع</button></div></div>`
-          : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="cancel-ask" data-v="${b.code}">إلغاء الموعد</button>
-               <button type="button" class="btn ghost" data-act="chat" data-v="${b.salonId}|${b.code}">${I.chat} تواصل</button></div>`)
+          : `<div class="booking-actions wrap3">
+               ${Store.canReschedule(b) ? `<button type="button" class="btn ghost" data-act="resched" data-v="${b.code}">تغيير الموعد</button>` : ""}
+               <button type="button" class="btn ghost" data-act="cancel-ask" data-v="${b.code}">إلغاء الموعد</button>
+               <button type="button" class="btn ghost" data-act="chat" data-v="${b.salonId}|${b.code}">${I.chat} تواصل</button></div>
+             ${Store.canReschedule(b) ? "" : `<p class="policy-line">تقديم الموعد أو تأخيره متاح حتى ساعتين قبله.</p>`}`)
           : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="rebook" data-v="${b.salonId}">احجز مجدداً</button>
                <button type="button" class="btn ghost" data-act="chat" data-v="${b.salonId}|${b.code}">${I.chat} تواصل</button></div>`}
       </article>`;
@@ -1058,10 +1120,11 @@
 
   /* ---------- العرض ---------- */
   function render() {
-    const brandOf = { book: () => salon(), done: () => salon(), salon: () => Store.salon(state.openSalon), chat: () => state.chat && Store.salon(state.chat.salonId), cart: () => Store.salon(state.cart.salonId), queue: () => state.qjoin && Store.salon(state.qjoin.salonId) };
+    const brandOf = { book: () => salon(), done: () => salon(), salon: () => Store.salon(state.openSalon), chat: () => state.chat && Store.salon(state.chat.salonId), cart: () => Store.salon(state.cart.salonId), queue: () => state.qjoin && Store.salon(state.qjoin.salonId),
+      resched: () => { const b = state.rs && loadBookings().find((x) => x.code === state.rs.code); return b && Store.salon(b.salonId); } };
     applyBrand(SALON || (brandOf[state.view] ? brandOf[state.view]() : null));
     $app.innerHTML = { splash: viewSplash, home: viewHome, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile,
-      salon: () => viewSalonHome(Store.salon(state.openSalon), true), chat: viewChat, cart: viewCart, queue: viewQueueJoin }[state.view]();
+      salon: () => viewSalonHome(Store.salon(state.openSalon), true), chat: viewChat, cart: viewCart, queue: viewQueueJoin, resched: viewResched }[state.view]();
     if (state.view === "chat") {
       const box = document.getElementById("messages"); if (box) box.scrollTop = box.scrollHeight;
       window.scrollTo(0, document.body.scrollHeight);
@@ -1198,6 +1261,7 @@
         if (state.view === "salon") { go("home"); break; }
         if (state.view === "chat") { go(state.chat.from && state.chat.from !== "chat" ? state.chat.from : "home"); break; }
         if (state.view === "cart") { go(SALON ? "home" : "salon"); break; }
+        if (state.view === "resched") { go("mine"); break; }
         if (state.view === "queue") { go(state.qjoin && state.qjoin.from === "salon" ? "salon" : "home"); break; }
         if (state.step > 0) { state.step--; render(); window.scrollTo(0, 0); } else go(state.bookFrom === "salon" ? "salon" : "home");
         break;
@@ -1223,6 +1287,25 @@
         state.cancelAsk = null; render();
         toast(r.forfeited ? `أُلغي الموعد، واحتفظ الصالون بالعربون ${money(r.forfeited)}` : r.refunded ? `أُلغي الموعد، وأُعيد لك العربون ${money(r.refunded)}` : r.late ? "أُلغي الموعد (إلغاء متأخر)" : "تم إلغاء الموعد");
         break;
+      }
+      case "resched": state.rs = { code: v, date: null, same: true, time: null, staffId: null }; go("resched"); break;
+      case "rs-date": state.rs.date = v; state.rs.time = null; render(); break;
+      case "rs-same": state.rs.same = v === "1"; state.rs.time = null; render(); break;
+      case "rs-time": { const [t, sid] = v.split("|"); state.rs.time = t; state.rs.staffId = sid; render(); document.querySelector('[data-act="rs-confirm"]')?.scrollIntoView({ block: "nearest" }); break; }
+      case "rs-confirm": {
+        const r = state.rs;
+        const res = Store.rescheduleBooking(r.code, { date: r.date, time: r.time, staffId: r.staffId });
+        if (res.error) {
+          toast(res.error === "too-late" ? "لا يمكن تغيير الموعد قبل أقل من ساعتين منه" : "هذا الوقت لم يعد متاحاً. اختر وقتاً آخر");
+          r.time = null; render(); break;
+        }
+        const nb = res.booking;
+        const was = `${fmtDate(res.from.date, { weekday: "long", day: "numeric", month: "short" })} ${fmtTime(res.from.time)}`;
+        const now = `${fmtDate(nb.date, { weekday: "long", day: "numeric", month: "short" })} ${fmtTime(nb.time)}`;
+        /* إبلاغ الصالون في المحادثة */
+        Store.sendMessage(nb.salonId, sessionPhone(), { from: "customer", name: loadProfile().name, bookingCode: nb.code,
+          text: `رسالة تلقائية: غيّرت موعدي من ${was} إلى ${now}${res.from.staffId !== nb.staffId ? ` مع ${nb.staffName}` : ""}.` });
+        state.rs = null; toast(`نُقل موعدك إلى ${now}`); go("mine"); break;
       }
       case "cal": state.calOpen = state.calOpen === v ? null : v; render(); break;
       case "ics": downloadIcs(v); break;

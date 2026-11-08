@@ -202,12 +202,41 @@ window.Store = (function () {
   const nowMin = (t) => { const n = t ? new Date(t) : new Date(); return n.getHours() * 60 + n.getMinutes(); };
 
   /* هل المختص مشغول في [start, start+dur) بحجز أو بدور جارٍ؟ (المصدر الوحيد للتعارض) */
-  function staffBusy(d, salonId, staffId, date, start, dur) {
-    const byBooking = d.bookings.some((b) => b.salonId === salonId && b.staffId === staffId && b.date === date && b.status !== "cancelled" && b.status !== "noshow"
+  /* exceptCode: يُستثنى حجز معيّن (عند تغيير موعده لا يتعارض مع نفسه) */
+  function staffBusy(d, salonId, staffId, date, start, dur, exceptCode) {
+    const byBooking = d.bookings.some((b) => b.code !== exceptCode && b.salonId === salonId && b.staffId === staffId && b.date === date && b.status !== "cancelled" && b.status !== "noshow"
       && start < hm(b.time) + b.minutes && start + dur > hm(b.time));
     if (byBooking) return true;
     return d.queue.some((q) => q.salonId === salonId && q.staffId === staffId && q.status === "serving" && q.date === date
       && start < q.startMin + q.minutes && start + dur > q.startMin);
+  }
+
+  /* ---------- تقديم الموعد وتأخيره ---------- */
+  const RESCHEDULE_MIN_HOURS = 2; /* يُسمح بالتغيير حتى ساعتين قبل الموعد الحالي */
+  /* هل يصلح نقل الحجز b إلى (date, time) مع المختص staffId؟ */
+  function canMoveTo(d, b, date, time, staffId) {
+    const s = d.salons.find((x) => x.id === b.salonId);
+    if (!s || !s.staff.some((p) => p.id === staffId)) return false;
+    if ((s.closedDays || []).includes(new Date(date + "T12:00:00").getDay())) return false;
+    const m = hm(time), dur = Math.max(b.minutes, 30);
+    if (m % 30 || m < s.hours.open * 60 || m + dur > s.hours.close * 60) return false;
+    if (date < todayISO() || (date === todayISO() && m < nowMin() + 30)) return false;
+    if (date === b.date && time === b.time && staffId === b.staffId) return false; /* نفس الموعد */
+    return !staffBusy(d, s.id, staffId, date, m, dur, b.code);
+  }
+  /* الأوقات المتاحة للنقل في يوم معيّن: لكل وقت أول مختص متاح (المختص الحالي أولاً) */
+  function rescheduleSlots(d, b, date, sameStaff) {
+    const s = d.salons.find((x) => x.id === b.salonId);
+    if (!s) return [];
+    const pool = sameStaff ? s.staff.filter((p) => p.id === b.staffId)
+      : [...s.staff.filter((p) => p.id === b.staffId), ...s.staff.filter((p) => p.id !== b.staffId)];
+    const out = [];
+    for (let m = s.hours.open * 60; m < s.hours.close * 60; m += 30) {
+      const time = `${pad2(Math.floor(m / 60) % 24)}:${pad2(m % 60)}`;
+      const who = pool.find((p) => canMoveTo(d, b, date, time, p.id));
+      if (who) out.push({ time, staff: { id: who.id, name: who.name } });
+    }
+    return out;
   }
 
   /* ---------- العربون ---------- */
@@ -419,7 +448,34 @@ window.Store = (function () {
     ORDER_STATES: { new: "طلب جديد", ready: "جاهز للاستلام", done: "تم الاستلام", cancelled: "ملغى" },
 
     /* هل المختص مشغول في هذا الوقت؟ (حجز أو دور جارٍ) */
-    staffBusy: (salonId, staffId, date, start, dur) => staffBusy(read(), salonId, staffId, date, start, dur),
+    staffBusy: (salonId, staffId, date, start, dur, exceptCode) => staffBusy(read(), salonId, staffId, date, start, dur, exceptCode),
+
+    /* ---------- تقديم الموعد وتأخيره ---------- */
+    RESCHEDULE_MIN_HOURS,
+    /* هل يمكن تغيير الموعد الآن؟ (مؤكَّد، وباقٍ عليه ساعتان على الأقل) */
+    canReschedule(b, t) { return !!b && b.status === "confirmed" && startOf(b).getTime() - (t || Date.now()) >= RESCHEDULE_MIN_HOURS * 3600e3; },
+    /* الأوقات المتاحة لنقل الموعد إلى يوم معيّن. sameStaff: نفس المختص فقط، وإلا أي مختص (المختص الحالي أولاً) */
+    rescheduleSlots(code, date, sameStaff) {
+      const d = read(); const b = d.bookings.find((x) => x.code === code);
+      return b ? rescheduleSlots(d, b, date, sameStaff) : [];
+    },
+    /* ينقل الموعد بعد التحقق من المهلة ومن أن الوقت ما زال متاحاً. العربون وسياسة الإلغاء يبقيان كما هما */
+    rescheduleBooking(code, { date, time, staffId }) {
+      let res = { error: "invalid" };
+      mutate((d) => {
+        const b = d.bookings.find((x) => x.code === code);
+        if (!b) return;
+        if (!this.canReschedule(b)) { res = { error: "too-late" }; return; }
+        if (!staffId || !canMoveTo(d, b, date, time, staffId)) { res = { error: "taken" }; return; }
+        const s = d.salons.find((x) => x.id === b.salonId);
+        const staff = s.staff.find((p) => p.id === staffId);
+        const from = { date: b.date, time: b.time, staffId: b.staffId, staffName: b.staffName };
+        b.rescheduled = [...(b.rescheduled || []), { from, at: new Date().toISOString() }];
+        Object.assign(b, { date, time, staffId: staff.id, staffName: staff.name });
+        res = { ok: true, from, booking: clone(b) };
+      });
+      return res;
+    },
 
     /* ---------- سجل الالتزام ---------- */
     reliability(salonId, phone) {

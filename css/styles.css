@@ -498,3 +498,13 @@ p { margin: 0; }
 .q-now { margin: 0; padding: 8px 12px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); color: var(--ok); font-weight: 700; }
 .queue-mine .booking-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
 .queue-mine .booking-actions svg { width: 14px; height: 14px; }
+
+/* تغيير الموعد */
+.booking-actions.wrap3 { flex-wrap: wrap; }
+.booking-actions.wrap3 .btn { flex: 1 1 30%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding-inline: 8px; }
+.booking-actions.wrap3 svg { width: 14px; height: 14px; }
+.current-appt, .new-appt { display: grid; gap: 2px; padding: 12px 16px; }
+.new-appt { border-color: var(--brand); background: var(--soft); }
+.day.is-current { border-style: dashed; border-color: var(--brand); }
+.rs-slot { display: grid; place-items: center; gap: 0; line-height: 1.2; padding-block: 6px; }
+.rs-slot small { font-size: 10px; font-weight: 400; opacity: .8; }
