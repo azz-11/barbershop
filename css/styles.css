@@ -1,0 +1,510 @@
+/* عناياتي — تطبيق حجز مواعيد الصوالين
+   الفكرة: بطاقة حجز بعمود واحد بعرض الجوال، والتطبيق يتلوّن بهوية الصالون المختار.
+   --brand / --brand-accent يتغيران حسب العلامة التجارية للصالون. */
+:root {
+  --bg: #F3F5F2;          /* أرضية فاتحة بميل أخضر */
+  --surface: #FFFFFF;
+  --ink: #15211F;         /* نص أساسي */
+  --muted: #5E6B68;       /* نص ثانوي */
+  --line: #DCE2DE;
+  --brand: var(--brand-base, #0E4F4A); /* بترولي — لون عناياتي، أو لون الصالون */
+  --brand-accent: #B8893B;/* نحاسي */
+  --on-brand: #FFFFFF;
+  --soft: color-mix(in oklab, var(--brand) 9%, var(--surface));
+  --danger: #B3261E;
+  --ok: #1E7A4C;
+
+  --font: "Thmanyah Sans", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --fs-xs: .78rem; --fs-sm: .9rem; --fs-md: 1rem; --fs-lg: 1.2rem; --fs-xl: 1.6rem; --fs-2xl: 2rem;
+  --r-sm: 10px; --r-md: 16px; --r-lg: 24px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1514; --surface: #182120; --ink: #E8EEEC; --muted: #9AA8A4; --line: #2A3533;
+    --brand: color-mix(in oklab, var(--brand-base, #0E4F4A) 55%, #9FE0D6);
+    --on-brand: #0F1514;
+    --soft: color-mix(in oklab, var(--brand) 14%, var(--surface));
+    --danger: #F2B8B5; --ok: #7BD3A4;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1514; --surface: #182120; --ink: #E8EEEC; --muted: #9AA8A4; --line: #2A3533;
+  --brand: color-mix(in oklab, var(--brand-base, #0E4F4A) 55%, #9FE0D6);
+  --on-brand: #0F1514;
+  --soft: color-mix(in oklab, var(--brand) 14%, var(--surface));
+  --danger: #F2B8B5; --ok: #7BD3A4;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font); font-size: var(--fs-md); line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; line-height: 1.25; text-wrap: balance; }
+p { margin: 0; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--brand-accent); outline-offset: 2px; border-radius: 6px; }
+
+.app {
+  max-width: 480px; min-height: 100%; margin-inline: auto;
+  display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.screen { display: flex; flex-direction: column; gap: 20px; animation: in .25s ease both; }
+@keyframes in { from { transform: translateY(6px); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .screen { animation: none; } * { transition: none !important; } }
+
+/* الرأس */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: var(--fs-lg); }
+.logo-mark {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--brand); color: var(--on-brand);
+}
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--surface); display: grid; place-items: center; cursor: pointer;
+}
+.icon-btn svg { width: 20px; height: 20px; }
+
+.hello h1 { font-size: var(--fs-2xl); font-weight: 700; }
+.hello p { color: var(--muted); }
+
+/* شرائح التصنيف */
+.segments { display: flex; gap: 8px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; }
+.segments button {
+  flex: 1; min-height: 40px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; font-weight: 500; color: var(--muted);
+}
+.segments button[aria-pressed="true"] { background: var(--brand); color: var(--on-brand); }
+
+/* بطاقة صالون */
+.salons { display: grid; gap: 12px; }
+.salon {
+  display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center;
+  padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  text-align: start; cursor: pointer; width: 100%;
+  transition: border-color .15s, transform .15s;
+}
+.salon:hover { border-color: var(--salon-color); }
+.salon:active { transform: scale(.99); }
+.monogram {
+  width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center;
+  font-size: 1.6rem; font-weight: 700; color: #fff; background: var(--salon-color);
+  box-shadow: inset 0 -6px 0 0 var(--salon-accent);
+}
+.salon-info { min-width: 0; display: grid; gap: 2px; }
+.salon-info h3 { font-size: var(--fs-md); }
+.salon-info p { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-xs); color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 500; }
+.tag { font-size: var(--fs-xs); padding: 2px 10px; border-radius: 999px; background: var(--soft); color: var(--brand); white-space: nowrap; }
+
+/* رأس الحجز */
+.salon-head {
+  display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center;
+  padding: 14px; border-radius: var(--r-md); background: var(--brand); color: var(--on-brand);
+}
+.salon-head .monogram { width: 52px; height: 52px; border-radius: 14px; font-size: 1.3rem; background: rgb(255 255 255 / .16); box-shadow: inset 0 -5px 0 0 var(--brand-accent); }
+.salon-head p { font-size: var(--fs-sm); opacity: .85; }
+
+/* مؤشر الخطوات */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.steps li { display: grid; gap: 6px; font-size: var(--fs-xs); color: var(--muted); text-align: center; }
+.steps li::before { content: ""; height: 4px; border-radius: 4px; background: var(--line); }
+.steps li.done::before, .steps li.current::before { background: var(--brand); }
+.steps li.current { color: var(--ink); font-weight: 500; }
+
+.section-title { font-size: var(--fs-lg); font-weight: 700; }
+.hint { color: var(--muted); font-size: var(--fs-sm); }
+
+/* خيارات قابلة للاختيار */
+.options { display: grid; gap: 10px; }
+.option {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center;
+  width: 100%; padding: 14px 16px; text-align: start; cursor: pointer;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-md);
+  transition: border-color .15s, background .15s;
+}
+.option:hover { border-color: color-mix(in oklab, var(--brand) 50%, var(--line)); }
+.option[aria-pressed="true"], .option[aria-checked="true"] { border-color: var(--brand); background: var(--soft); }
+.option .title { font-weight: 500; }
+.option .sub { grid-column: 1; font-size: var(--fs-sm); color: var(--muted); }
+.option .price { font-weight: 700; white-space: nowrap; }
+.option .check {
+  grid-row: span 2; width: 24px; height: 24px; border-radius: 8px; border: 1.5px solid var(--line);
+  display: grid; place-items: center; color: var(--on-brand);
+}
+.option[aria-pressed="true"] .check, .option[aria-checked="true"] .check { background: var(--brand); border-color: var(--brand); }
+.option .check svg { width: 14px; height: 14px; opacity: 0; }
+.option[aria-pressed="true"] .check svg, .option[aria-checked="true"] .check svg { opacity: 1; }
+.option.with-check { grid-template-columns: auto 1fr auto; }
+.option.with-check .sub { grid-column: 2; }
+
+/* المختصون */
+.staff { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.person {
+  display: grid; justify-items: center; gap: 6px; padding: 16px 10px; cursor: pointer; text-align: center;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-md);
+}
+.person[aria-checked="true"] { border-color: var(--brand); background: var(--soft); }
+.avatar {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 1.2rem; background: var(--soft); color: var(--brand);
+  border: 2px solid var(--brand-accent);
+}
+.person[aria-checked="true"] .avatar { background: var(--brand); color: var(--on-brand); }
+.person .name { font-weight: 500; }
+.person .role { font-size: var(--fs-xs); color: var(--muted); }
+
+/* التاريخ والوقت */
+.days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; margin-inline: -4px; padding-inline: 4px; }
+.day {
+  flex: 0 0 64px; display: grid; justify-items: center; gap: 0; padding: 10px 0; cursor: pointer; scroll-snap-align: start;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-md);
+}
+.day .dow { font-size: var(--fs-xs); color: var(--muted); }
+.day .dnum { font-size: var(--fs-lg); font-weight: 700; }
+.day .mon { font-size: var(--fs-xs); color: var(--muted); }
+.day[aria-checked="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.day[aria-checked="true"] .dow, .day[aria-checked="true"] .mon { color: inherit; opacity: .85; }
+.day:disabled { opacity: .4; cursor: not-allowed; }
+
+.period { display: grid; gap: 8px; }
+.period h4 { margin: 0; font-size: var(--fs-sm); font-weight: 500; color: var(--muted); }
+.slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.slot {
+  min-height: 44px; border-radius: var(--r-sm); border: 1.5px solid var(--line); background: var(--surface);
+  cursor: pointer; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.slot[aria-checked="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.slot:disabled { cursor: not-allowed; color: var(--muted); background: transparent; border-style: dashed; text-decoration: line-through; }
+@media (max-width: 360px) { .slots { grid-template-columns: repeat(3, 1fr); } }
+
+/* الملخص */
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 4px 16px; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row span:first-child { color: var(--muted); }
+.row span:last-child { text-align: end; font-weight: 500; }
+.row.total span { font-size: var(--fs-lg); font-weight: 700; color: var(--ink); }
+
+/* شريط الإجراء السفلي */
+.action-bar {
+  position: fixed; inset: auto 0 0; z-index: 5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+}
+.action-inner { max-width: 448px; margin-inline: auto; display: flex; gap: 12px; align-items: center; }
+.action-total { display: grid; line-height: 1.2; }
+.action-total small { color: var(--muted); font-size: var(--fs-xs); }
+.action-total b { font-size: var(--fs-lg); }
+.btn {
+  flex: 1; min-height: 52px; border: 0; border-radius: var(--r-md); cursor: pointer;
+  background: var(--brand); color: var(--on-brand); font-weight: 700; font-size: var(--fs-md);
+  transition: filter .15s, opacity .15s;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); flex: 0 0 auto; padding-inline: 18px; }
+.btn.danger { background: transparent; color: var(--danger); border: 1.5px solid currentColor; }
+
+/* التنقل السفلي */
+.tabbar { position: fixed; inset: auto 0 0; z-index: 5; background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.tabbar-inner { max-width: 448px; margin-inline: auto; display: grid; grid-template-columns: 1fr 1fr; }
+.tab { display: grid; justify-items: center; gap: 2px; padding: 10px 0; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: var(--fs-xs); position: relative; }
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-current="page"] { color: var(--brand); font-weight: 500; }
+.badge { position: absolute; top: 6px; inset-inline-start: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--brand-accent); color: #fff; font-size: 11px; line-height: 18px; }
+
+/* التأكيد */
+.ticket {
+  background: var(--surface); border-radius: var(--r-lg); border: 1px solid var(--line); overflow: hidden;
+}
+.ticket-top { background: var(--brand); color: var(--on-brand); padding: 22px 18px; display: grid; gap: 6px; justify-items: center; text-align: center; }
+.ticket-top .ok { width: 56px; height: 56px; border-radius: 50%; background: rgb(255 255 255 / .18); display: grid; place-items: center; }
+.ticket-top .ok svg { width: 28px; height: 28px; }
+.ticket-top h2 { font-size: var(--fs-xl); }
+.ticket-cut { height: 0; border-top: 2px dashed var(--line); margin: 0 18px; position: relative; }
+.ticket-body { padding: 8px 18px 18px; }
+.code { font-size: var(--fs-xl); letter-spacing: .12em; font-weight: 700; direction: ltr; }
+
+/* مواعيدي */
+.bookings { display: grid; gap: 12px; }
+.booking { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; display: grid; gap: 10px; }
+.booking-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+.booking-head h3 { font-size: var(--fs-md); }
+.status { font-size: var(--fs-xs); padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.status.upcoming { background: color-mix(in oklab, var(--ok) 15%, var(--surface)); color: var(--ok); }
+.status.cancelled { background: color-mix(in oklab, var(--danger) 12%, var(--surface)); color: var(--danger); }
+.status.past { background: var(--line); color: var(--muted); }
+.booking-when { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+.booking-when svg { width: 18px; height: 18px; color: var(--brand); }
+.booking-actions { display: flex; gap: 8px; }
+.booking-actions .btn { min-height: 40px; font-size: var(--fs-sm); flex: 1; }
+.confirm-box { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--danger) 8%, var(--surface)); }
+
+.empty { text-align: center; padding: 40px 16px; display: grid; gap: 12px; justify-items: center; color: var(--muted); }
+.empty svg { width: 48px; height: 48px; color: var(--brand); }
+
+.demo-note { font-size: var(--fs-xs); color: var(--muted); text-align: center; }
+.toast { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 20;
+  background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-size: var(--fs-sm); }
+
+/* ===== الإصدار 2: الواجهة الترحيبية، حسابي، الوضع الليلي ===== */
+.tabbar-inner { grid-template-columns: repeat(3, 1fr); }
+.block { display: grid; gap: 12px; }
+.block-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.link { border: 0; background: none; color: var(--brand); font-weight: 500; cursor: pointer; padding: 6px 0; min-height: 44px; }
+.hello .greet { color: var(--brand-accent); font-weight: 500; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 4px 16px; }
+.btn.wide { width: 100%; flex: none; }
+.seg-ic { vertical-align: -3px; margin-inline-end: 6px; }
+
+/* الواجهة الترحيبية */
+.splash {
+  position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+  background: #0E4F4A; color: #F3F5F2; text-align: center; overflow: hidden;
+  transition: opacity .28s ease, transform .28s ease;
+}
+.splash::after { content: ""; position: absolute; inset: auto 0 0; height: 14%; background: #B8893B; }
+.splash.leaving { opacity: 0; transform: scale(1.03); }
+.splash-mark {
+  width: 112px; height: 112px; border-radius: 32px; display: grid; place-items: center;
+  background: rgb(255 255 255 / .08); border: 1px solid rgb(255 255 255 / .18);
+  animation: mark-in .7s cubic-bezier(.2,.8,.2,1) both;
+}
+.splash-mark svg { width: 56px; height: 56px; }
+.splash-name { font-size: 2.6rem; font-weight: 700; letter-spacing: 0; margin-top: 12px; animation: rise .6s .15s ease both; }
+.splash-line { font-size: var(--fs-lg); color: #E3C58F; font-weight: 500; animation: rise .6s .3s ease both; }
+.splash-sub { max-width: 28ch; opacity: .8; animation: rise .6s .45s ease both; }
+.splash-btn { flex: none; width: min(320px, 100%); margin-top: 28px; background: #F3F5F2; color: #0E4F4A; position: relative; z-index: 1; animation: rise .6s .55s ease both; }
+.splash-skip { position: absolute; z-index: 1; bottom: calc(14% + 16px); left: 50%; transform: translateX(-50%); border: 0; background: none; color: rgb(243 245 242 / .7); cursor: pointer; min-height: 44px; padding-inline: 16px; }
+@keyframes mark-in { from { transform: scale(.7) rotate(-20deg); } to { transform: none; } }
+@keyframes rise { from { transform: translateY(10px); opacity: .001; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .splash-mark, .splash-name, .splash-line, .splash-sub, .splash-btn { animation: none; } }
+
+/* موعدك القادم */
+.next-visit {
+  display: grid; gap: 2px; text-align: start; width: 100%; cursor: pointer; padding: 14px 16px;
+  border: 0; border-radius: var(--r-md); background: var(--brand); color: var(--on-brand);
+}
+.next-label { font-size: var(--fs-xs); opacity: .8; }
+.next-main { font-weight: 700; }
+.next-when { font-size: var(--fs-sm); opacity: .9; }
+
+/* حسابي */
+.profile-head { display: flex; gap: 14px; align-items: center; }
+.profile-head h1 { font-size: var(--fs-xl); }
+.avatar.lg { width: 72px; height: 72px; font-size: 1.8rem; flex: none; }
+.avatar.lg svg { width: 32px; height: 32px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stat { display: grid; justify-items: center; gap: 0; padding: 12px 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); text-align: center; }
+.stat b { font-size: var(--fs-lg); color: var(--brand); }
+.stat span { font-size: var(--fs-xs); color: var(--muted); }
+@media (max-width: 360px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.reward { padding: 14px 16px; display: grid; gap: 10px; }
+.bar { height: 10px; border-radius: 10px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--brand-accent)); }
+.form { padding: 16px; display: grid; gap: 6px; }
+.form label { font-size: var(--fs-sm); color: var(--muted); margin-top: 6px; }
+.form input, .form select {
+  width: 100%; min-height: 48px; padding: 10px 14px; border-radius: var(--r-sm); border: 1.5px solid var(--line);
+  background: var(--bg); color: var(--ink); font: inherit;
+}
+.form input:focus, .form select:focus { outline: none; border-color: var(--brand); }
+.form input[aria-invalid="true"] { border-color: var(--danger); }
+.form input[dir="ltr"] { text-align: right; }
+.field-error { color: var(--danger); font-size: var(--fs-xs); }
+.form .booking-actions { margin-top: 12px; }
+
+/* ===== وضع الصالون الواحد (‎?s=...‎) ===== */
+.logo-mark.salon-mark { font-size: 1.05rem; font-weight: 700; box-shadow: inset 0 -4px 0 0 var(--brand-accent); }
+.salon-splash { background: var(--brand-base, #0E4F4A); }
+.salon-splash::after { background: var(--brand-accent); }
+.splash-mark.mono { font-size: 3.4rem; font-weight: 700; }
+.salon-splash .splash-line { color: color-mix(in oklab, var(--brand-accent) 70%, #fff); }
+.splash-powered { position: absolute; z-index: 1; bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5%); left: 0; right: 0; font-size: var(--fs-sm); font-weight: 700; color: var(--brand-base, #0E4F4A); }
+
+.salon-hero {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 16px; align-items: center;
+  padding: 20px; border-radius: var(--r-lg); background: var(--brand-base, #0E4F4A); color: #fff; /* لون الهوية الأصلي في الوضعين */
+}
+.monogram.xl {
+  width: 76px; height: 76px; border-radius: 22px; font-size: 2rem;
+  background: rgb(255 255 255 / .14); color: inherit; box-shadow: inset 0 -7px 0 0 var(--brand-accent);
+}
+.salon-hero-text { min-width: 0; display: grid; gap: 2px; }
+.salon-hero h1 { font-size: var(--fs-xl); }
+.greet-on { font-size: var(--fs-sm); opacity: .8; }
+.slogan { color: color-mix(in oklab, var(--brand-accent) 60%, #fff); font-weight: 500; }
+.hero-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: var(--fs-sm); }
+.open-pill { padding: 2px 10px; border-radius: 999px; background: rgb(0 0 0 / .18); font-size: var(--fs-xs); }
+.open-pill.is-open::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #7BD3A4; margin-inline-end: 6px; vertical-align: 1px; }
+.hero-btn { grid-column: 1 / -1; background: #fff; color: var(--brand-base, #0E4F4A); }
+
+.option.svc { grid-template-columns: minmax(0, 1fr) auto; }
+.option.svc .go { grid-column: 2; justify-self: end; font-size: var(--fs-xs); color: var(--brand); font-weight: 700; }
+.team { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.member { display: grid; justify-items: center; gap: 4px; padding: 16px 8px; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+.member .name { font-weight: 500; }
+.member .role { font-size: var(--fs-xs); color: var(--muted); }
+.about { color: var(--muted); max-width: 60ch; }
+.map-link { display: grid; place-items: center; text-decoration: none; }
+.powered { align-self: center; font-size: var(--fs-xs); color: var(--muted); text-decoration: none; padding: 8px 12px; }
+.powered b { color: var(--ink); }
+.group-title { margin: 6px 0 0; font-size: var(--fs-sm); font-weight: 700; color: var(--brand-accent); }
+.status.noshow { background: color-mix(in oklab, var(--brand-accent) 18%, var(--surface)); color: var(--ink); }
+.hero-note { grid-column: 1 / -1; padding: 10px 14px; border-radius: var(--r-sm); background: rgb(0 0 0 / .18); font-size: var(--fs-sm); }
+.panel-links { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center; font-size: var(--fs-sm); color: var(--muted); padding-block: 8px; }
+.panel-links a { color: var(--brand); font-weight: 500; }
+
+/* رسائل التحقق (محاكاة SMS) والحساب المؤكَّد */
+.sms-sim { padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 6px 24px -12px rgb(0 0 0 / .35); display: grid; gap: 6px; }
+.sms-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: var(--fs-xs); color: var(--muted); }
+.sms-tag { padding: 0 8px; border-radius: 999px; background: color-mix(in oklab, var(--brand-accent) 20%, var(--surface)); color: var(--ink); }
+.sms-sim p { font-size: var(--fs-sm); }
+.otp-input { font-size: 1.6rem !important; letter-spacing: .5em; text-align: center !important; font-weight: 700; }
+.verified-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }
+.ok-tag { font-size: var(--fs-xs); color: var(--ok); font-weight: 700; }
+.form.auth .row-actions { display: flex; gap: 16px; justify-content: flex-end; }
+.form.auth .link { min-height: 36px; font-size: var(--fs-sm); }
+
+/* الرضا والمسافة */
+.meta .sat b, .hero-meta .sat b { color: var(--ok); }
+.salon-hero .hero-meta .sat b { color: inherit; }
+.dist b { font-weight: 700; }
+.near-btn, .dist-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm);
+}
+.near-btn[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.dist-btn { background: rgb(255 255 255 / .14); border-color: rgb(255 255 255 / .35); color: inherit; min-height: 32px; font-size: var(--fs-xs); }
+.staff-stats { font-size: var(--fs-xs); color: var(--muted); }
+.staff-stats b { color: var(--ink); }
+.rate-box { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border-radius: var(--r-sm); background: var(--soft); }
+.verdict-row { display: grid; gap: 6px; }
+.verdict-row > span { font-size: var(--fs-sm); color: var(--muted); }
+.verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.verdict {
+  display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: var(--r-sm); cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-xs);
+}
+.verdict[aria-checked="true"].v-very { border-color: var(--ok); color: var(--ok); background: color-mix(in oklab, var(--ok) 10%, var(--surface)); }
+.verdict[aria-checked="true"].v-ok { border-color: var(--brand); color: var(--brand); background: color-mix(in oklab, var(--brand) 10%, var(--surface)); }
+.verdict[aria-checked="true"].v-no { border-color: var(--danger); color: var(--danger); background: color-mix(in oklab, var(--danger) 8%, var(--surface)); }
+.rate-note { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border-radius: var(--r-sm); border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+.rated { display: grid; gap: 2px; font-size: var(--fs-sm); color: var(--muted); }
+.rated b { color: var(--ink); }
+
+/* التواصل */
+.contact-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.contact-btn {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px;
+  border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+  font: inherit; font-weight: 500; text-decoration: none; cursor: pointer;
+}
+.contact-btn svg { width: 20px; height: 20px; color: var(--brand); flex: none; }
+.contact-btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.contact-btn.primary svg { color: inherit; }
+.contact-btn .badge { top: -6px; inset-inline-start: auto; inset-inline-end: -4px; }
+
+/* المحادثة */
+.chat-screen { padding-bottom: 8px; }
+.chat-ctx { font-size: var(--fs-sm); color: var(--muted); text-align: center; }
+.messages { display: flex; flex-direction: column; gap: 8px; min-height: 30vh; }
+.msg { max-width: 82%; padding: 8px 12px; border-radius: 16px; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.msg p { margin: 0; }
+.msg time { font-size: 11px; opacity: .7; justify-self: end; }
+.msg.me { align-self: flex-start; background: var(--brand); color: var(--on-brand); border-end-start-radius: 4px; }
+.msg.them { align-self: flex-end; background: var(--surface); border: 1px solid var(--line); border-end-end-radius: 4px; }
+.msg-ref { font-size: 11px; opacity: .8; }
+.quick { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.chip { flex: none; min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.chat-form { display: flex; gap: 8px; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); background: var(--bg); padding-block: 8px; }
+.chat-form input { flex: 1; min-width: 0; min-height: 48px; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; }
+.chat-form input:focus { outline: none; border-color: var(--brand); }
+.chat-form .btn { flex: none; padding-inline: 20px; border-radius: 999px; }
+.thread-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; padding: 12px 14px; text-align: start; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--ink); font: inherit; margin-bottom: 8px; }
+.thread-row .avatar { width: 44px; height: 44px; font-size: 1rem; }
+.thread-main { display: grid; min-width: 0; }
+.thread-main .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-side { display: grid; justify-items: end; gap: 4px; }
+.badge-inline { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--brand-accent); color: #fff; font-size: 12px; line-height: 22px; text-align: center; }
+.monogram.sm { width: 44px; height: 44px; border-radius: 13px; font-size: 1.1rem; box-shadow: inset 0 -4px 0 0 var(--salon-accent); }
+
+/* المنتجات والسلة */
+.products { display: grid; gap: 10px; }
+.product { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
+.product.out { opacity: .6; }
+.product-ic { grid-row: span 3; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--soft); color: var(--brand); }
+.product-ic svg { width: 22px; height: 22px; }
+.product-name { font-size: var(--fs-sm); }
+.product .hint { font-size: var(--fs-xs); }
+.product-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.btn.add-small { flex: none; min-height: 34px; padding-inline: 14px; font-size: var(--fs-sm); border-radius: 999px; }
+.qty { display: inline-flex; align-items: center; gap: 8px; }
+.qty button { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--brand); background: var(--surface); color: var(--brand); font-size: 1.1rem; line-height: 1; cursor: pointer; }
+.cart-row { align-items: center; }
+.cart-bar { position: fixed; inset: auto 0 calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px; }
+.cart-inner { max-width: 448px; margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 8px 8px 16px; border-radius: var(--r-md); background: var(--ink); color: var(--bg); box-shadow: 0 10px 30px -12px rgb(0 0 0 / .5); }
+.cart-inner svg { width: 18px; height: 18px; vertical-align: -3px; }
+.cart-inner .btn { flex: none; min-height: 44px; padding-inline: 16px; }
+.link svg { width: 16px; height: 16px; vertical-align: -3px; }
+.link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+
+/* ===== العربون، تأكيد الحجز، والدور ===== */
+.deposit-note { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--r-md); font-size: var(--fs-sm);
+  background: color-mix(in oklab, var(--brand-accent) 16%, var(--surface)); border: 1px solid color-mix(in oklab, var(--brand-accent) 45%, var(--line)); }
+.deposit-note span { color: var(--muted); }
+.policy-line { font-size: var(--fs-xs); color: var(--muted); margin: 0; }
+.countdown { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 700; color: var(--brand); font-size: var(--fs-sm); }
+.countdown svg { width: 16px; height: 16px; }
+.dep-lines { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: var(--fs-sm); color: var(--muted); }
+.dep-lines b { color: var(--ink); }
+.ticket-extras { display: grid; gap: 10px; padding: 0 18px 18px; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.trio-btn { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; min-height: 52px; border-radius: var(--r-sm);
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-xs); text-decoration: none; cursor: pointer; }
+.trio-btn svg { width: 18px; height: 18px; color: var(--brand); }
+.trio-btn[aria-expanded="true"] { border-color: var(--brand); background: var(--soft); }
+.cal-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-choices .chip { text-decoration: none; display: inline-flex; align-items: center; }
+
+.queue-card { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-md); background: var(--surface); border: 1.5px solid color-mix(in oklab, var(--brand) 35%, var(--line)); }
+.q-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.live-dot { font-size: var(--fs-xs); color: var(--ok); font-weight: 700; }
+.live-dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-inline-end: 6px; vertical-align: 1px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot::before { animation: none; } }
+.q-line { margin: 0; font-size: var(--fs-sm); }
+.q-mine { border: 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--soft); color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.q-number { font-size: var(--fs-xl); font-weight: 700; color: var(--brand); line-height: 1; }
+.q-now { margin: 0; padding: 8px 12px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); color: var(--ok); font-weight: 700; }
+.queue-mine .booking-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.queue-mine .booking-actions svg { width: 14px; height: 14px; }
+
+/* تغيير الموعد */
+.booking-actions.wrap3 { flex-wrap: wrap; }
+.booking-actions.wrap3 .btn { flex: 1 1 30%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding-inline: 8px; }
+.booking-actions.wrap3 svg { width: 14px; height: 14px; }
+.current-appt, .new-appt { display: grid; gap: 2px; padding: 12px 16px; }
+.new-appt { border-color: var(--brand); background: var(--soft); }
+.day.is-current { border-style: dashed; border-color: var(--brand); }
+.rs-slot { display: grid; place-items: center; gap: 0; line-height: 1.2; padding-block: 6px; }
+.rs-slot small { font-size: 10px; font-weight: 400; opacity: .8; }
