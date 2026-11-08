@@ -467,3 +467,34 @@ p { margin: 0; }
 .cart-inner .btn { flex: none; min-height: 44px; padding-inline: 16px; }
 .link svg { width: 16px; height: 16px; vertical-align: -3px; }
 .link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+
+/* ===== العربون، تأكيد الحجز، والدور ===== */
+.deposit-note { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--r-md); font-size: var(--fs-sm);
+  background: color-mix(in oklab, var(--brand-accent) 16%, var(--surface)); border: 1px solid color-mix(in oklab, var(--brand-accent) 45%, var(--line)); }
+.deposit-note span { color: var(--muted); }
+.policy-line { font-size: var(--fs-xs); color: var(--muted); margin: 0; }
+.countdown { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 700; color: var(--brand); font-size: var(--fs-sm); }
+.countdown svg { width: 16px; height: 16px; }
+.dep-lines { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: var(--fs-sm); color: var(--muted); }
+.dep-lines b { color: var(--ink); }
+.ticket-extras { display: grid; gap: 10px; padding: 0 18px 18px; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.trio-btn { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; min-height: 52px; border-radius: var(--r-sm);
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-xs); text-decoration: none; cursor: pointer; }
+.trio-btn svg { width: 18px; height: 18px; color: var(--brand); }
+.trio-btn[aria-expanded="true"] { border-color: var(--brand); background: var(--soft); }
+.cal-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-choices .chip { text-decoration: none; display: inline-flex; align-items: center; }
+
+.queue-card { display: grid; gap: 8px; padding: 14px 16px; border-radius: var(--r-md); background: var(--surface); border: 1.5px solid color-mix(in oklab, var(--brand) 35%, var(--line)); }
+.q-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.live-dot { font-size: var(--fs-xs); color: var(--ok); font-weight: 700; }
+.live-dot::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-inline-end: 6px; vertical-align: 1px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot::before { animation: none; } }
+.q-line { margin: 0; font-size: var(--fs-sm); }
+.q-mine { border: 0; padding: 10px 12px; border-radius: var(--r-sm); background: var(--soft); color: var(--ink); font: inherit; text-align: start; cursor: pointer; }
+.q-number { font-size: var(--fs-xl); font-weight: 700; color: var(--brand); line-height: 1; }
+.q-now { margin: 0; padding: 8px 12px; border-radius: var(--r-sm); background: color-mix(in oklab, var(--ok) 14%, var(--surface)); color: var(--ok); font-weight: 700; }
+.queue-mine .booking-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
+.queue-mine .booking-actions svg { width: 14px; height: 14px; }

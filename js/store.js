@@ -11,6 +11,9 @@
                 يُنشأ الحساب من التطبيق، أو من لوحة الصالون عند الحجز الهاتفي.
    threads    : المحادثات بين العميل والصالون، مفتاحها "salonId|phone"
    orders[]   : طلبات منتجات الصالون (استلام ودفع في الصالون)
+   reliability: سجل الالتزام لكل رقم جوال عند كل صالون، مفتاحه "salonId|phone":
+                { shows: الحضور، noShows: الغياب، lateCancels: الإلغاءات المتأخرة }
+   queue[]    : الدور (بدون موعد) لليوم، لكل صالون أرقامه A-01، A-02 …
    otps       : رموز التحقق المؤقتة (في النظام الحقيقي تُرسل SMS ولا تُحفظ إلا مشفّرة على الخادم)
 
    نموذج العمل: كل صالون يشترك شهرياً أو سنوياً، ويحصل على:
@@ -32,6 +35,23 @@ window.Store = (function () {
     graceDays: 3,          // أيام سماح بعد الانتهاء قبل الإيقاف
     bank: "البنك: (يُضاف لاحقاً)\nالآيبان: SA00 0000 0000 0000 0000 0000\nاسم المستفيد: عناياتي"
   };
+  /* العربون وسياسة الإلغاء (لكل صالون) */
+  const DEFAULT_DEPOSIT = {
+    mode: "none",            // none بدون عربون · smart عربون ذكي · all لكل الحجوزات
+    type: "fixed",           // fixed مبلغ ثابت · percent نسبة من الإجمالي
+    amount: 30,
+    cancelHours: 3,          // مهلة الإلغاء المجاني بالساعات
+    rules: {
+      noShows: { on: true, min: 2 },                    // غاب العميل هذا العدد أو أكثر
+      total: { on: false, min: 200 },                   // إجمالي الحجز هذا المبلغ أو أكثر
+      peak: { on: false, days: [4, 5], from: 18, to: 22 } // أيام وساعات الذروة
+    }
+  };
+  /* الدور بدون موعد (لكل صالون) */
+  const DEFAULT_QUEUE = { enabled: false, remote: true, max: 10 };
+  /* إحداثيات الصوالين النموذجية القديمة في الرياض، لنقلها إلى جدة مرة واحدة دون المساس بما عدّله أصحابها */
+  const OLD_DEMO_COORDS = { sanad: [24.8235, 46.642], qass: [24.878, 46.656], maha: [24.804, 46.6], lulu: [24.735, 46.765] };
+
   const PLAN_NAMES = { trial: "تجربة مجانية", monthly: "الباقة الشهرية", yearly: "الباقة السنوية" };
 
   /* اشتراكات تجريبية للصوالين النموذجية حتى تظهر كل الحالات */
@@ -56,6 +76,31 @@ window.Store = (function () {
     return { plan: demo.plan, startedAt: payments[0] ? payments[0].at : addDays(endsAt, -billing.trialDays), endsAt, payments, requests: [] };
   }
 
+  /* دمج إعدادات محفوظة مع القيم الافتراضية (لكل مستوى) */
+  function withDefaults(def, val) {
+    if (Array.isArray(def)) return Array.isArray(val) ? val : clone(def);
+    if (def && typeof def === "object") {
+      const out = {}; const v = val && typeof val === "object" ? val : {};
+      Object.keys(def).forEach((k) => { out[k] = withDefaults(def[k], v[k]); });
+      Object.keys(v).forEach((k) => { if (!(k in out)) out[k] = v[k]; });
+      return out;
+    }
+    return val === undefined || val === null ? def : val;
+  }
+  /* يبني سجل الالتزام من الحجوزات القديمة (مرة واحدة عند الترقية) */
+  function buildReliability(bookings) {
+    const r = {};
+    bookings.forEach((b) => {
+      if (!b.customer || !b.customer.phone) return;
+      const k = b.salonId + "|" + b.customer.phone;
+      const x = r[k] || (r[k] = { shows: 0, noShows: 0, lateCancels: 0 });
+      if (b.status === "completed") x.shows += 1;
+      if (b.status === "noshow") x.noShows += 1;
+      if (b.status === "cancelled" && b.lateCancel) x.lateCancels += 1;
+    });
+    return r;
+  }
+
   /* يكمّل أي بيانات قديمة بالحقول الجديدة (ترقية تلقائية) */
   function normalize(d) {
     d.billing = { ...DEFAULT_BILLING, ...(d.billing || {}) };
@@ -73,6 +118,18 @@ window.Store = (function () {
       s.staff.forEach((m) => { const sm = src.staff.find((x) => x.id === m.id); if (sm && m.seedCuts == null && sm.seedCuts != null) m.seedCuts = sm.seedCuts; });
     });
     d.otps = d.otps || {};
+    d.queue = d.queue || [];
+    if (!d.reliability) d.reliability = buildReliability(d.bookings || []);
+    d.salons.forEach((s) => {
+      const src = base.find((x) => x.id === s.id) || {};
+      /* نقل الصوالين النموذجية من الرياض إلى جدة إن لم يغيّر أصحابها موقعها */
+      const old = OLD_DEMO_COORDS[s.id];
+      if (old && s.location && Math.abs(s.location.lat - old[0]) < 1e-4 && Math.abs(s.location.lng - old[1]) < 1e-4 && src.location) {
+        s.location = clone(src.location); s.area = src.area; s.address = src.address;
+      }
+      s.deposit = withDefaults(DEFAULT_DEPOSIT, s.deposit || src.deposit);
+      s.queue = withDefaults(DEFAULT_QUEUE, s.queue || src.queue);
+    });
     d.threads = d.threads || {};
     d.orders = d.orders || [];
     d.salons.forEach((s) => {
@@ -106,7 +163,9 @@ window.Store = (function () {
       if (raw && raw === cacheRaw) return cacheData;
       const d = JSON.parse(raw);
       if (d && d.version === 1) {
-        const needs = !d.billing || !d.customers || !d.threads || !d.orders || d.salons.some((s) => !s.subscription || "rating" in s || !s.contact);
+        const needs = !d.billing || !d.customers || !d.threads || !d.orders || !d.queue || !d.reliability
+          || d.salons.some((s) => !s.subscription || "rating" in s || !s.contact || !s.deposit || !s.queue || !s.deposit.rules
+            || (OLD_DEMO_COORDS[s.id] && s.location && Math.abs(s.location.lat - OLD_DEMO_COORDS[s.id][0]) < 1e-4));
         normalize(d);
         if (needs) { write(d); return d; }
         cacheRaw = raw; cacheData = d; return d;
@@ -135,6 +194,49 @@ window.Store = (function () {
     if (days <= 5) return { ...base, code: "expiring", label: `ينتهي خلال ${daysText(days)}`, live: true };
     return { ...base, code: "active", label: "مشترك", live: true };
   }
+  /* ---------- أدوات الوقت ---------- */
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const todayISO = (t) => { const n = t ? new Date(t) : new Date(); return `${n.getFullYear()}-${pad2(n.getMonth() + 1)}-${pad2(n.getDate())}`; };
+  const hm = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const startOf = (b) => { const [y, mo, da] = b.date.split("-").map(Number); const [h, mi] = b.time.split(":").map(Number); return new Date(y, mo - 1, da, h, mi); };
+  const nowMin = (t) => { const n = t ? new Date(t) : new Date(); return n.getHours() * 60 + n.getMinutes(); };
+
+  /* هل المختص مشغول في [start, start+dur) بحجز أو بدور جارٍ؟ (المصدر الوحيد للتعارض) */
+  function staffBusy(d, salonId, staffId, date, start, dur) {
+    const byBooking = d.bookings.some((b) => b.salonId === salonId && b.staffId === staffId && b.date === date && b.status !== "cancelled" && b.status !== "noshow"
+      && start < hm(b.time) + b.minutes && start + dur > hm(b.time));
+    if (byBooking) return true;
+    return d.queue.some((q) => q.salonId === salonId && q.staffId === staffId && q.status === "serving" && q.date === date
+      && start < q.startMin + q.minutes && start + dur > q.startMin);
+  }
+
+  /* ---------- العربون ---------- */
+  function depositAmount(dep, total) {
+    const a = dep.type === "percent" ? Math.round((total * Number(dep.amount || 0)) / 100) : Number(dep.amount || 0);
+    return Math.max(0, Math.min(a, total));
+  }
+
+  /* ---------- الدور ---------- */
+  const queueToday = (d, salonId) => d.queue.filter((q) => q.salonId === salonId && q.date === todayISO()).sort((a, b) => a.seq - b.seq);
+  const waitingOf = (d, salonId) => queueToday(d, salonId).filter((q) => q.status === "waiting");
+  /* رسالة المحاكاة عندما يقترب دور صاحب الدور عن بُعد */
+  function queueNotify(d, salonId) {
+    const sent = [];
+    waitingOf(d, salonId).forEach((q, i) => {
+      if (!q.remote || !q.phone || q.noticeAt || i > 1) return;
+      q.notice = i === 0 ? "دورك التالي، توجّه للصالون الآن." : "دورك بعد شخص واحد، توجّه للصالون.";
+      q.noticeAt = new Date().toISOString();
+      sent.push({ name: q.name, number: q.number, text: q.notice });
+    });
+    return sent;
+  }
+  function bumpRel(d, salonId, phone, key) {
+    if (!phone) return;
+    const k = salonId + "|" + phone;
+    const x = d.reliability[k] || (d.reliability[k] = { shows: 0, noShows: 0, lateCancels: 0 });
+    x[key] += 1;
+  }
+
   /* نسبة الرضا = (راضٍ جداً + راضٍ) ÷ كل التقييمات */
   function satisfaction(r) {
     const total = r.very + r.ok + r.no;
@@ -158,6 +260,8 @@ window.Store = (function () {
     saveSalon(salon) {
       mutate((d) => {
         if (!salon.subscription) salon.subscription = makeSub(salon.id, salon.createdAt, d.billing);
+        salon.deposit = withDefaults(DEFAULT_DEPOSIT, salon.deposit);
+        salon.queue = withDefaults(DEFAULT_QUEUE, salon.queue);
         const i = d.salons.findIndex((s) => s.id === salon.id);
         if (i >= 0) d.salons[i] = salon; else d.salons.push(salon);
       });
@@ -233,10 +337,9 @@ window.Store = (function () {
 
     /* الأوقات المتاحة لصالون في يوم معيّن، لمدة معيّنة، ولمختص أو "any" */
     freeSlots(salon, date, duration, staffId) {
-      const bookings = read().bookings.filter((b) => b.salonId === salon.id && b.date === date && b.status !== "cancelled");
-      const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+      const d = read();
       const pad = (n) => String(n).padStart(2, "0");
-      const busy = (sid, start) => bookings.some((b) => b.staffId === sid && start < toMin(b.time) + b.minutes && start + duration > toMin(b.time));
+      const busy = (sid, start) => staffBusy(d, salon.id, sid, date, start, duration);
       const pool = staffId && staffId !== "any" ? salon.staff.filter((p) => p.id === staffId) : salon.staff;
       const now = new Date();
       const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` === date;
@@ -314,6 +417,150 @@ window.Store = (function () {
     addOrder(o) { mutate((d) => { d.orders.push(o); }); return o; },
     updateOrder(id, patch) { mutate((d) => { d.orders = d.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)); }); },
     ORDER_STATES: { new: "طلب جديد", ready: "جاهز للاستلام", done: "تم الاستلام", cancelled: "ملغى" },
+
+    /* هل المختص مشغول في هذا الوقت؟ (حجز أو دور جارٍ) */
+    staffBusy: (salonId, staffId, date, start, dur) => staffBusy(read(), salonId, staffId, date, start, dur),
+
+    /* ---------- سجل الالتزام ---------- */
+    reliability(salonId, phone) {
+      const x = phone && read().reliability[salonId + "|" + phone];
+      return { shows: 0, noShows: 0, lateCancels: 0, ...(x || {}) };
+    },
+
+    /* ---------- العربون وسياسة الإلغاء ----------
+       يعيد { required, amount, reason }. السبب يُعرض للعميل بصياغة عامة غير جارحة،
+       ولا يُذكر له أبداً أن العربون بسبب غيابه. */
+    depositFor(salon, { phone, date, time, total }) {
+      const dep = salon.deposit || DEFAULT_DEPOSIT;
+      const none = { required: false, amount: 0, reason: "" };
+      if (!total || dep.mode === "none") return none;
+      const amount = depositAmount(dep, total);
+      if (!amount) return none;
+      if (dep.mode === "all") return { required: true, amount, reason: "حسب سياسة الصالون" };
+      const r = dep.rules;
+      if (r.peak.on && date && time) {
+        const day = new Date(date + "T12:00:00").getDay(), h = hm(time) / 60;
+        if (r.peak.days.includes(day) && h >= r.peak.from && h < r.peak.to) return { required: true, amount, reason: "لأن الموعد في وقت ذروة" };
+      }
+      if (r.total.on && total >= r.total.min) return { required: true, amount, reason: "حسب سياسة الصالون للحجوزات الكبيرة" };
+      if (r.noShows.on && phone && this.reliability(salon.id, phone).noShows >= r.noShows.min) return { required: true, amount, reason: "حسب سياسة الصالون" };
+      return none;
+    },
+    cancelHours: (salon) => ((salon && salon.deposit) || DEFAULT_DEPOSIT).cancelHours,
+    /* هل فات وقت الإلغاء المجاني لهذا الحجز؟ */
+    isLateCancel(b, t) {
+      const hours = b.policy && b.policy.cancelHours != null ? b.policy.cancelHours : this.cancelHours(this.salon(b.salonId));
+      return startOf(b).getTime() - (t || Date.now()) < hours * 3600e3;
+    },
+    /* إلغاء حجز. by: "customer" أو "salon". الإلغاء المتأخر من العميل يُسجَّل ويخسر به العربون */
+    cancelBooking(code, by) {
+      let out = { late: false, forfeited: 0, refunded: 0 };
+      const late = by === "customer" && this.isLateCancel(read().bookings.find((x) => x.code === code) || { date: todayISO(), time: "00:00" });
+      mutate((d) => {
+        const b = d.bookings.find((x) => x.code === code);
+        if (!b || b.status !== "confirmed") return;
+        b.status = "cancelled"; b.cancelledBy = by; b.cancelledAt = new Date().toISOString(); b.lateCancel = late;
+        if (late) bumpRel(d, b.salonId, b.customer && b.customer.phone, "lateCancels");
+        if (b.deposit && b.deposit.status === "paid") {
+          b.deposit.status = late ? "forfeited" : "refunded";
+          out = { late, forfeited: late ? b.deposit.amount : 0, refunded: late ? 0 : b.deposit.amount };
+        } else out.late = late;
+      });
+      return out;
+    },
+    /* نتيجة الموعد من لوحة الصالون: completed حضر، noshow لم يحضر (يحتفظ الصالون بالعربون) */
+    setOutcome(code, outcome) {
+      mutate((d) => {
+        const b = d.bookings.find((x) => x.code === code);
+        if (!b || (b.status !== "confirmed")) return;
+        b.status = outcome;
+        bumpRel(d, b.salonId, b.customer && b.customer.phone, outcome === "completed" ? "shows" : "noShows");
+        if (b.deposit && b.deposit.status === "paid") b.deposit.status = outcome === "completed" ? "applied" : "kept";
+      });
+    },
+    DEPOSIT_STATES: { paid: "مدفوع", applied: "خُصم من الفاتورة", kept: "احتفظ به الصالون", forfeited: "احتفظ به الصالون (إلغاء متأخر)", refunded: "أُعيد للعميل" },
+
+    /* ---------- الدور (بدون موعد) ---------- */
+    queueToday: (salonId) => queueToday(read(), salonId),
+    queueWaiting: (salonId) => waitingOf(read(), salonId),
+    queueOf: (phone) => read().queue.filter((q) => q.phone === phone && q.date === todayISO() && (q.status === "waiting" || q.status === "serving")),
+    /* عدد المختصين المتاحين الآن: نخصم من لديه حجز في الساعة القادمة (والحد الأدنى واحد) */
+    availableStaff(salon, t) {
+      const d = read(); const date = todayISO(t), m = nowMin(t);
+      const free = salon.staff.filter((p) => !d.bookings.some((b) => b.salonId === salon.id && b.staffId === p.id && b.date === date
+        && b.status === "confirmed" && hm(b.time) < m + 60 && hm(b.time) + b.minutes > m));
+      return Math.max(1, free.length);
+    },
+    /* الانتظار المتوقع بالدقائق: مدد خدمات من قبله (والمتبقي من الجاري) ÷ المختصين المتاحين */
+    queueEstimate(salon, beforeSeq, t) {
+      const d = read(); const m = nowMin(t);
+      const list = queueToday(d, salon.id);
+      const waiting = list.filter((q) => q.status === "waiting" && (beforeSeq == null || q.seq < beforeSeq));
+      const serving = list.filter((q) => q.status === "serving");
+      const staff = this.availableStaff(salon, t);
+      /* إذا كان عدد من قبله أقل من المختصين الفارغين الآن فلا انتظار تقريباً */
+      const idle = Math.max(0, staff - serving.length);
+      if (waiting.length < idle) return { waiting: waiting.length, minutes: 0, staff };
+      const load = waiting.reduce((a, q) => a + q.minutes, 0) + serving.reduce((a, q) => a + Math.max(0, q.startMin + q.minutes - m), 0);
+      return { waiting: waiting.length, minutes: Math.ceil(load / staff / 5) * 5, staff };
+    },
+    /* الانضمام للدور. remote: من التطبيق (بالجوال المؤكَّد)، أو حاضر يضيفه الصالون بالاسم */
+    joinQueue(salonId, { name, phone, remote, serviceIds }) {
+      const s = this.salon(salonId);
+      if (!s || !s.queue.enabled) return { error: "disabled" };
+      if (remote && !s.queue.remote) return { error: "remote-off" };
+      const m = nowMin();
+      if (m < s.hours.open * 60 || m >= s.hours.close * 60) return { error: "closed" };
+      let entry = null, err = null;
+      mutate((d) => {
+        const list = queueToday(d, salonId);
+        if (list.filter((q) => q.status === "waiting").length >= s.queue.max) { err = "full"; return; }
+        if (phone && list.some((q) => q.phone === phone && (q.status === "waiting" || q.status === "serving"))) { err = "exists"; return; }
+        const svc = s.services.filter((x) => (serviceIds || []).includes(x.id));
+        const seq = list.length + 1;
+        entry = {
+          id: "q-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), salonId, date: todayISO(), seq, number: "A-" + pad2(seq),
+          name: name || "عميل", phone: phone || null, remote: !!remote,
+          services: svc.map((x) => x.id), serviceNames: svc.map((x) => x.name),
+          minutes: svc.length ? svc.reduce((a, x) => a + x.min, 0) : (s.services[0] ? s.services[0].min : 30),
+          status: "waiting", createdAt: new Date().toISOString()
+        };
+        d.queue.push(entry);
+        queueNotify(d, salonId);
+        entry = clone(d.queue[d.queue.length - 1]);
+      });
+      return err ? { error: err } : { ok: true, entry };
+    },
+    /* إدارة الدور: start ابدأ · done تم · skip تخطّى (غياب إن كان عن بُعد) · leave خروج العميل */
+    queueAction(id, action, staffId) {
+      let res = { ok: false };
+      mutate((d) => {
+        const q = d.queue.find((x) => x.id === id);
+        if (!q) return;
+        const s = d.salons.find((x) => x.id === q.salonId);
+        if (action === "start" && q.status === "waiting") {
+          const m = nowMin();
+          const pool = staffId ? s.staff.filter((p) => p.id === staffId) : s.staff;
+          const who = pool.find((p) => !staffBusy(d, s.id, p.id, q.date, m, q.minutes));
+          if (!who) { res = { ok: false, error: "no-staff" }; return; }
+          Object.assign(q, { status: "serving", staffId: who.id, staffName: who.name, startMin: m, startedAt: new Date().toISOString() });
+          res = { ok: true, staffName: who.name };
+        } else if (action === "done" && q.status === "serving") {
+          Object.assign(q, { status: "done", doneAt: new Date().toISOString() });
+          bumpRel(d, q.salonId, q.phone, "shows");
+          res = { ok: true };
+        } else if (action === "skip" && q.status === "waiting") {
+          q.status = "skipped";
+          if (q.remote) bumpRel(d, q.salonId, q.phone, "noShows");
+          res = { ok: true };
+        } else if (action === "leave" && q.status === "waiting") {
+          q.status = "left"; res = { ok: true };
+        } else return;
+        res.notified = queueNotify(d, q.salonId);
+      });
+      return res;
+    },
+    QUEUE_STATES: { waiting: "ينتظر", serving: "يُخدم الآن", done: "تم", skipped: "تخطّى", left: "خرج من الدور" },
 
     /* الحجوزات */
     bookings: (salonId) => read().bookings.filter((b) => !salonId || b.salonId === salonId),

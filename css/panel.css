@@ -111,3 +111,18 @@
 .tabbar-inner.tabs-5 { grid-template-columns: repeat(5, 1fr); max-width: 528px; }
 .tabbar-inner.tabs-5 .tab { font-size: 11px; }
 .panel .chat-form { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+/* سجل الالتزام والدور */
+.rel-line { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--fs-xs); color: var(--muted); }
+.rel-line b { color: var(--ink); }
+.rel-badge { padding: 1px 8px; border-radius: 999px; font-weight: 700; background: color-mix(in oklab, var(--danger) 14%, var(--surface)); color: var(--danger); }
+.src-tag.warn { background: color-mix(in oklab, var(--danger) 14%, var(--surface)); color: var(--danger); }
+.rules { border: 0; padding: 0; margin: 6px 0 0; display: grid; gap: 8px; }
+.rules legend { font-size: var(--fs-sm); color: var(--muted); margin-bottom: 6px; padding: 0; }
+.rule { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: var(--fs-sm); color: var(--ink) !important; margin: 0 !important; }
+.form .rule input[type="checkbox"] { width: auto; min-height: 0; accent-color: var(--brand); }
+.form .rule input[type="number"] { width: 84px; min-height: 40px; padding: 6px 10px; }
+.q-item.serving { border-color: color-mix(in oklab, var(--ok) 50%, var(--line)); }
+.q-item .booking-actions { flex-wrap: wrap; }
+.q-staff { flex: 1 1 140px; min-height: 40px; padding: 6px 10px; border-radius: var(--r-sm); border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; font-size: var(--fs-sm); }
+.q-item .booking-actions .btn { flex: 1 1 auto; min-height: 40px; }

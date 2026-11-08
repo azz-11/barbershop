@@ -244,6 +244,64 @@
     </div>`;
   }
 
+  /* سجل الالتزام: "حضر 8 من 9"، وشارة تنبيه لمن غاب مرتين أو أكثر */
+  const timesText = (n) => (n === 1 ? "مرة" : n === 2 ? "مرتين" : n <= 10 ? `${n} مرات` : `${n} مرة`);
+  function relLine(salonId, phone) {
+    if (!phone) return "";
+    const r = Store.reliability(salonId, phone);
+    const total = r.shows + r.noShows;
+    if (!total && !r.lateCancels) return `<p class="rel-line">عميل جديد عندكم</p>`;
+    return `<p class="rel-line">${total ? `حضر <b class="num">${r.shows}</b> من <b class="num">${total}</b>` : ""}${r.lateCancels ? `${total ? " · " : ""}ألغى متأخراً ${timesText(r.lateCancels)}` : ""}
+      ${r.noShows >= 2 ? `<span class="rel-badge">تنبيه: غاب ${timesText(r.noShows)}</span>` : ""}</p>`;
+  }
+
+  /* ---------- الدور (بدون موعد) ---------- */
+  function queueHtml(s) {
+    const list = Store.queueToday(s.id);
+    const serving = list.filter((q) => q.status === "serving");
+    const waiting = list.filter((q) => q.status === "waiting");
+    const finished = list.filter((q) => q.status !== "waiting" && q.status !== "serving");
+    const est = Store.queueEstimate(s);
+    const staffFree = s.staff.filter((m) => !serving.some((q) => q.staffId === m.id));
+    const svcOpts = s.services.map((x) => `<option value="${esc(x.id)}">${esc(x.name)} · ${x.min} د</option>`).join("");
+    return `<div class="stats three">
+        <div class="stat"><b class="num">${waiting.length}</b><span>ينتظرون</span></div>
+        <div class="stat"><b class="num">${serving.length}</b><span>يُخدمون الآن</span></div>
+        <div class="stat"><b class="num">${est.minutes}</b><span>دقيقة انتظار متوقع</span></div>
+      </div>
+      <form class="card form" id="walkin-form" novalidate>
+        <b>إضافة عميل حاضر</b>
+        <div class="two">
+          <div><label for="wk-name">الاسم</label><input id="wk-name" name="wkname" autocomplete="off" placeholder="مثال: أبو خالد"></div>
+          <div><label for="wk-svc">الخدمة</label><select id="wk-svc" name="wksvc">${svcOpts}</select></div>
+        </div>
+        <button type="submit" class="btn" style="margin-top:10px">أضف للدور</button>
+      </form>
+      ${serving.length ? `<h2 class="section-title">يُخدمون الآن</h2><div class="bookings">${serving.map((q) => `
+        <article class="booking q-item serving"><div class="booking-head"><div class="when-big"><b class="num" dir="ltr">${q.number}</b><span>مع ${esc(q.staffName)} · منذ ${fmtTime(fromMin(q.startMin))}</span></div><span class="status upcoming">يُخدم الآن</span></div>
+          <div class="cust"><b>${esc(q.name)}</b>${q.remote ? '<span class="src-tag">عن بُعد</span>' : '<span class="src-tag">حاضر</span>'}</div>
+          <p class="hint">${q.serviceNames.length ? q.serviceNames.map(esc).join("، ") : "خدمة عامة"} · <span class="num">${q.minutes}</span> دقيقة</p>
+          <div class="booking-actions"><button type="button" class="btn" data-act="q-done" data-v="${q.id}">تم</button></div></article>`).join("")}</div>` : ""}
+      <h2 class="section-title">قائمة الانتظار</h2>
+      ${waiting.length ? `<div class="bookings">${waiting.map((q, i) => {
+        const wait = Store.queueEstimate(s, q.seq).minutes;
+        const asking = state.ask === "qskip:" + q.id;
+        return `<article class="booking q-item"><div class="booking-head"><div class="when-big"><b class="num" dir="ltr">${q.number}</b><span>الترتيب ${i + 1}${wait ? ` · نحو ${wait} دقيقة` : " · التالي"}</span></div>
+            ${q.remote ? '<span class="src-tag">عن بُعد</span>' : '<span class="src-tag">حاضر</span>'}</div>
+          <div class="cust"><b>${esc(q.name)}</b>${q.phone ? `<span class="num" dir="ltr">${esc(q.phone)}</span>` : ""}</div>
+          ${q.phone ? relLine(s.id, q.phone) : ""}
+          <p class="hint">${q.serviceNames.length ? q.serviceNames.map(esc).join("، ") : "خدمة عامة"} · <span class="num">${q.minutes}</span> دقيقة${q.noticeAt ? " · أُرسلت له رسالة الاقتراب" : ""}</p>
+          ${asking ? `<div class="confirm-box"><p>${q.remote ? "تخطّي صاحب الدور عن بُعد يُحسب غياباً في سجل التزامه. هل تريد التخطي؟" : "تخطّي هذا الدور؟"}</p><div class="booking-actions">
+              <button type="button" class="btn danger" data-act="q-skip" data-v="${q.id}">نعم، تخطَّ</button><button type="button" class="btn ghost" data-act="ask" data-v="">تراجع</button></div></div>`
+            : `<div class="booking-actions">
+              <select class="q-staff" id="qs-${q.id}" aria-label="المختص">${[`<option value="">أول ${s.type === "men" ? "حلاق" : "مختصة"} متاح</option>`, ...staffFree.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`)].join("")}</select>
+              <button type="button" class="btn" data-act="q-start" data-v="${q.id}">ابدأ</button>
+              <button type="button" class="btn ghost" data-act="ask" data-v="qskip:${q.id}">تخطّى</button></div>`}
+        </article>`;
+      }).join("")}</div>` : `<div class="empty"><p>لا أحد في الانتظار الآن.</p></div>`}
+      ${finished.length ? `<p class="hint">اليوم: ${finished.filter((q) => q.status === "done").length} تمت خدمتهم · ${finished.filter((q) => q.status === "skipped").length} تخطّي · ${finished.filter((q) => q.status === "left").length} خرجوا من الدور</p>` : ""}`;
+  }
+
   /* ---------- الحجوزات ---------- */
   function viewBookings(s) {
     const today = isoDate(new Date());
@@ -252,7 +310,8 @@
     const todays = all.filter((b) => b.date === today && active(b));
     const upcoming = all.filter((b) => b.date > today && active(b));
     const past = all.filter((b) => b.date < today).reverse();
-    const list = { today: todays, upcoming, past }[state.filter];
+    if (state.filter === "queue" && !(s.queue && s.queue.enabled)) state.filter = "today";
+    const list = { today: todays, upcoming, past, queue: [] }[state.filter];
     const expected = todays.filter((b) => b.status !== "noshow").reduce((a, b) => a + b.total, 0);
     const needs = all.filter((b) => bookingState(b)[0] === "past").length;
 
@@ -277,7 +336,8 @@
           <b>${esc(b.customer?.name || "عميل")}</b>
           ${b.customer?.phone ? `<span class="num" dir="ltr">${esc(b.customer.phone)}</span>` : ""}
         </div>
-        <p class="hint">${b.source === "phone" ? '<span class="src-tag">حجز هاتفي</span> ' : ""}${b.serviceNames.map(esc).join("، ")} · ${esc(b.staffName)} · <span class="num">${money(b.total)}</span> · ${b.payment === "cash" ? "دفع في الصالون" : "مدفوع"}</p>
+        ${relLine(s.id, b.customer && b.customer.phone)}
+        <p class="hint">${b.source === "phone" ? '<span class="src-tag">حجز هاتفي</span> ' : ""}${b.serviceNames.map(esc).join("، ")} · ${esc(b.staffName)} · <span class="num">${money(b.total)}</span> · ${b.deposit ? `عربون <span class="num">${money(b.deposit.amount)}</span> ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")} · الباقي <span class="num">${money(Math.max(0, b.total - b.deposit.amount))}</span> في الصالون` : b.payment === "cash" ? "دفع في الصالون" : "مدفوع"}${b.lateCancel ? ' · <span class="src-tag warn">إلغاء متأخر</span>' : ""}</p>
         ${b.feedback ? `<div class="fb fb-${b.feedback.salon}"><span>تقييم العميل: الصالون <b>${Store.VERDICTS[b.feedback.salon]}</b> · ${esc(b.staffName)} <b>${Store.VERDICTS[b.feedback.staff]}</b></span>${b.feedback.note ? `<span>"${esc(b.feedback.note)}"</span>` : ""}</div>` : ""}
         ${actions}
       </article>`;
@@ -293,8 +353,9 @@
           <div class="stat"><b class="num">${expected.toLocaleString("en-US")}</b><span>دخل اليوم المتوقع</span></div>
         </div>
         ${needs ? `<p class="notice">لديك <b class="num">${needs}</b> ${needs === 1 ? "حجز سابق" : "حجوزات سابقة"} بانتظار تأكيد الحضور (تبويب "السابقة").</p>` : ""}
-        <div class="segments" role="group" aria-label="عرض الحجوزات">${chip("today", "اليوم", todays.length)}${chip("upcoming", "القادمة", upcoming.length)}${chip("past", "السابقة", past.length)}</div>
-        ${list.length ? `<div class="bookings">${items}</div>` : `<div class="empty">${I.cal}<p>${{ today: "لا توجد حجوزات اليوم.", upcoming: "لا توجد حجوزات قادمة.", past: "لا توجد حجوزات سابقة." }[state.filter]}</p></div>`}
+        <div class="segments" role="group" aria-label="عرض الحجوزات">${chip("today", "اليوم", todays.length)}${chip("upcoming", "القادمة", upcoming.length)}${chip("past", "السابقة", past.length)}${s.queue && s.queue.enabled ? chip("queue", "الدور", Store.queueWaiting(s.id).length) : ""}</div>
+        ${state.filter === "queue" ? queueHtml(s)
+          : list.length ? `<div class="bookings">${items}</div>` : `<div class="empty">${I.cal}<p>${{ today: "لا توجد حجوزات اليوم.", upcoming: "لا توجد حجوزات قادمة.", past: "لا توجد حجوزات سابقة." }[state.filter]}</p></div>`}
         <div class="card share">
           <b>رابط حجز صالونك</b>
           <p class="hint">شاركه مع عملائك في إنستقرام وواتساب، أو اطبعه كرمز QR.</p>
@@ -501,8 +562,8 @@
           <label for="se-address">العنوان الكامل</label><input id="se-address" name="address" value="${esc(s.address || "")}">
           <label>الموقع على الخريطة (لحساب المسافة للعملاء)</label>
           <div class="two">
-            <div><input id="se-lat" name="lat" inputmode="decimal" dir="ltr" placeholder="خط العرض 24.71" value="${s.location ? s.location.lat : ""}" aria-label="خط العرض"></div>
-            <div><input id="se-lng" name="lng" inputmode="decimal" dir="ltr" placeholder="خط الطول 46.67" value="${s.location ? s.location.lng : ""}" aria-label="خط الطول"></div>
+            <div><input id="se-lat" name="lat" inputmode="decimal" dir="ltr" placeholder="خط العرض 21.54" value="${s.location ? s.location.lat : ""}" aria-label="خط العرض"></div>
+            <div><input id="se-lng" name="lng" inputmode="decimal" dir="ltr" placeholder="خط الطول 39.17" value="${s.location ? s.location.lng : ""}" aria-label="خط الطول"></div>
           </div>
           <button type="button" class="btn ghost" data-act="here" style="margin-top:6px">استخدم موقعي الحالي (وأنا في الصالون)</button>
           ${s.location ? `<a class="hint" href="https://www.google.com/maps/search/?api=1&query=${s.location.lat},${s.location.lng}" target="_blank" rel="noopener">تحقق من الموقع على الخرائط</a>` : ""}
@@ -516,6 +577,38 @@
           <fieldset class="days-pick"><legend>أيام الإغلاق</legend>
             ${DAYS.map((d, i) => `<label class="day-check"><input type="checkbox" name="closed" value="${i}" ${(s.closedDays || []).includes(i) ? "checked" : ""}><span>${d}</span></label>`).join("")}
           </fieldset>
+
+          <b class="form-sep">العربون والإلغاء</b>
+          <p class="hint">العربون يُخصم من الفاتورة، ويحتفظ به الصالون إذا لم يحضر العميل أو ألغى بعد المهلة.</p>
+          ${(() => { const dp = s.deposit; const r = dp.rules; return `
+          <div class="two">
+            <div><label for="dp-mode">وضع العربون</label><select id="dp-mode" name="dpmode">
+              ${[["none", "بدون عربون"], ["smart", "عربون ذكي"], ["all", "عربون لكل الحجوزات"]].map(([v, l]) => `<option value="${v}" ${dp.mode === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+            <div><label for="dp-cancel">الإلغاء المجاني قبل (ساعة)</label><input id="dp-cancel" name="dpcancel" type="number" min="0" max="72" inputmode="numeric" value="${dp.cancelHours}"></div>
+          </div>
+          <div class="two">
+            <div><label for="dp-type">قيمة العربون</label><select id="dp-type" name="dptype">
+              <option value="fixed" ${dp.type === "fixed" ? "selected" : ""}>مبلغ ثابت (ر.س)</option><option value="percent" ${dp.type === "percent" ? "selected" : ""}>نسبة من الإجمالي (٪)</option></select></div>
+            <div><label for="dp-amount">${dp.type === "percent" ? "النسبة" : "المبلغ"}</label><input id="dp-amount" name="dpamount" type="number" min="0" inputmode="numeric" value="${dp.amount}"></div>
+          </div>
+          <fieldset class="rules"><legend>شروط العربون الذكي (يكفي أن يتحقق أحدها)</legend>
+            <label class="rule"><input type="checkbox" name="rns" ${r.noShows.on ? "checked" : ""}><span>العميل غاب</span>
+              <input name="rnsmin" type="number" min="1" inputmode="numeric" value="${r.noShows.min}" aria-label="عدد مرات الغياب"><span>مرات أو أكثر</span></label>
+            <label class="rule"><input type="checkbox" name="rtot" ${r.total.on ? "checked" : ""}><span>إجمالي الحجز</span>
+              <input name="rtotmin" type="number" min="1" inputmode="numeric" value="${r.total.min}" aria-label="المبلغ"><span>ر.س أو أكثر</span></label>
+            <label class="rule"><input type="checkbox" name="rpeak" ${r.peak.on ? "checked" : ""}><span>أوقات الذروة</span></label>
+            <div class="days-pick">${DAYS.map((d, i) => `<label class="day-check"><input type="checkbox" name="peakday" value="${i}" ${r.peak.days.includes(i) ? "checked" : ""}><span>${d}</span></label>`).join("")}</div>
+            <div class="two">
+              <div><label for="pk-from">من الساعة</label>${hours(r.peak.from, "pk-from", 0, 23)}</div>
+              <div><label for="pk-to">إلى الساعة</label>${hours(r.peak.to, "pk-to", 1, 24)}</div>
+            </div>
+          </fieldset>
+          <p class="hint">يظهر للعميل سبب عام مثل "لأن الموعد في وقت ذروة" أو "حسب سياسة الصالون"، ولا يُذكر له غيابه.</p>`; })()}
+
+          <b class="form-sep">الدور (بدون موعد)</b>
+          <label class="day-check inline"><input type="checkbox" name="qon" ${s.queue.enabled ? "checked" : ""}><span>استقبال بدون موعد</span></label>
+          <label class="day-check inline"><input type="checkbox" name="qremote" ${s.queue.remote ? "checked" : ""}><span>السماح بحجز الدور عن بُعد من التطبيق</span></label>
+          <label for="q-max">الحد الأقصى للمنتظرين</label><input id="q-max" name="qmax" type="number" min="1" max="50" inputmode="numeric" value="${s.queue.max}">
 
           <b class="form-sep">التواصل مع العملاء</b>
           <div class="two">
@@ -589,13 +682,36 @@
         }, () => UI.toast("لم نتمكن من تحديد الموقع. اسمح للمتصفح بالوصول إليه."), { timeout: 10000 });
         break;
       case "copy": UI.copy(document.getElementById("share-link").value, document.getElementById("share-link")); break;
-      case "b-done": Store.updateBooking(v, { status: "completed" }); state.ask = null; render(); UI.toast("سُجّل الحضور"); break;
-      case "b-noshow": Store.updateBooking(v, { status: "noshow" }); state.ask = null; render(); UI.toast("سُجّل عدم الحضور"); break;
-      case "b-cancel": Store.updateBooking(v, { status: "cancelled", cancelledBy: "salon" }); state.ask = null; render(); UI.toast("تم إلغاء الحجز"); break;
+      case "b-done": Store.setOutcome(v, "completed"); state.ask = null; render(); UI.toast("سُجّل الحضور"); break;
+      case "b-noshow": {
+        const bk = Store.bookings(state.salonId).find((x) => x.code === v);
+        Store.setOutcome(v, "noshow"); state.ask = null; render();
+        UI.toast(bk && bk.deposit && bk.deposit.status === "paid" ? `سُجّل عدم الحضور، واحتفظ الصالون بالعربون ${money(bk.deposit.amount)}` : "سُجّل عدم الحضور");
+        break;
+      }
+      case "b-cancel": {
+        const bk = Store.bookings(state.salonId).find((x) => x.code === v);
+        const r = Store.cancelBooking(v, "salon");
+        if (r.refunded && bk && bk.deposit) Payments.refundDeposit({ ref: bk.deposit.ref, amount: r.refunded });
+        state.ask = null; render(); UI.toast(r.refunded ? `تم إلغاء الحجز، وأُعيد العربون ${money(r.refunded)} للعميل` : "تم إلغاء الحجز");
+        break;
+      }
+      case "q-start": {
+        const sel = document.getElementById("qs-" + v);
+        const r = Store.queueAction(v, "start", sel && sel.value ? sel.value : null);
+        state.ask = null; render();
+        if (!r.ok) UI.toast(r.error === "no-staff" ? "لا يوجد مختص متاح الآن دون تعارض مع المواعيد" : "تعذّر بدء الدور");
+        else UI.toast(`بدأ الدور مع ${r.staffName}${noticeText(r.notified)}`);
+        break;
+      }
+      case "q-done": { const r = Store.queueAction(v, "done"); render(); UI.toast("تمت الخدمة" + noticeText(r.notified)); break; }
+      case "q-skip": { const r = Store.queueAction(v, "skip"); state.ask = null; render(); UI.toast("تُخطّي الدور" + noticeText(r.notified)); break; }
       case "svc-del": update((s) => { s.services = s.services.filter((x) => x.id !== v); }, "تم حذف الخدمة"); break;
       case "st-del": update((s) => { s.staff = s.staff.filter((x) => x.id !== v); }, "تمت الإزالة من الفريق"); break;
     }
   });
+
+  const noticeText = (list) => (list && list.length ? ` · أُرسلت رسالة الاقتراب لـ${list.map((x) => x.name).join(" و")}` : "");
 
   function sendReply(text) {
     text = String(text || "").trim(); if (!text || !state.thread) return;
@@ -615,6 +731,7 @@
 
   $app.addEventListener("input", (e) => {
     if (e.target.dataset && e.target.dataset.reply) { state.draft = e.target.value; return; }
+    if (e.target.name === "dptype") { const l = document.querySelector('label[for="dp-amount"]'); if (l) l.textContent = e.target.value === "percent" ? "النسبة" : "المبلغ"; }
     if (e.target.name === "primary" || e.target.name === "accent") {
       const p = document.getElementById("brand-preview");
       p.style.setProperty(e.target.name === "primary" ? "--p" : "--a", e.target.value);
@@ -632,6 +749,13 @@
       render(); return;
     }
     if (f.id === "reply-form") { sendReply(f.querySelector("#reply-input").value); return; }
+    if (f.id === "walkin-form") {
+      const name = f.wkname.value.trim();
+      if (name.length < 2) { UI.toast("اكتب اسم العميل"); f.wkname.focus(); return; }
+      const r = Store.joinQueue(state.salonId, { name, remote: false, serviceIds: [f.wksvc.value] });
+      const msg = { full: "الدور ممتلئ (الحد الأقصى من الإعدادات)", closed: "الصالون مغلق الآن حسب ساعات العمل", disabled: "الدور غير مفعّل" }[r.error];
+      render(); UI.toast(msg || `أُضيف ${name} برقم ${r.entry.number}`); return;
+    }
     if (f.id === "product-form") {
       const name = f.name.value.trim(), price = Number(f.price.value);
       if (!name || f.price.value === "" || !(price >= 0)) { document.getElementById("pr-err").hidden = false; return; }
@@ -722,6 +846,24 @@
         const v = normPhone(el.value);
         if (v && !/^(05\d{8}|0\d{8,9}|9200\d{5})$/.test(v)) { err.textContent = `${label} غير صحيح. اكتبه مثل 05XXXXXXXX.`; err.hidden = false; return; }
       }
+      const num = (el) => Number(el.value);
+      const dep = {
+        mode: f.dpmode.value, type: f.dptype.value, amount: num(f.dpamount), cancelHours: num(f.dpcancel),
+        rules: {
+          noShows: { on: f.rns.checked, min: num(f.rnsmin) },
+          total: { on: f.rtot.checked, min: num(f.rtotmin) },
+          peak: { on: f.rpeak.checked, days: [...f.querySelectorAll('input[name="peakday"]:checked')].map((x) => Number(x.value)), from: num(f["pk-from"]), to: num(f["pk-to"]) }
+        }
+      };
+      const qset = { enabled: f.qon.checked, remote: f.qremote.checked, max: num(f.qmax) };
+      if (dep.mode !== "none" && !(dep.amount > 0)) { err.textContent = "اكتب قيمة العربون."; err.hidden = false; return; }
+      if (dep.type === "percent" && dep.amount > 100) { err.textContent = "نسبة العربون لا تتجاوز 100٪."; err.hidden = false; return; }
+      if (!(dep.cancelHours >= 0 && dep.cancelHours <= 72)) { err.textContent = "مهلة الإلغاء بين 0 و72 ساعة."; err.hidden = false; return; }
+      if (dep.mode === "smart" && !dep.rules.noShows.on && !dep.rules.total.on && !dep.rules.peak.on) { err.textContent = "العربون الذكي يحتاج شرطاً واحداً على الأقل."; err.hidden = false; return; }
+      if (dep.rules.noShows.on && !(dep.rules.noShows.min >= 1)) { err.textContent = "عدد مرات الغياب 1 على الأقل."; err.hidden = false; return; }
+      if (dep.rules.total.on && !(dep.rules.total.min >= 1)) { err.textContent = "اكتب مبلغ الحجز الذي يتطلب عربوناً."; err.hidden = false; return; }
+      if (dep.rules.peak.on && (!dep.rules.peak.days.length || dep.rules.peak.to <= dep.rules.peak.from)) { err.textContent = "حدد أيام الذروة، واجعل ساعة النهاية بعد البداية."; err.hidden = false; return; }
+      if (qset.enabled && !(qset.max >= 1 && qset.max <= 50)) { err.textContent = "الحد الأقصى للمنتظرين بين 1 و50."; err.hidden = false; return; }
       if (f.pass.value && f.pass.value.length < 4) { err.textContent = "كلمة المرور 4 أحرف على الأقل."; err.hidden = false; return; }
       update((s) => {
         Object.assign(s, {
@@ -733,6 +875,7 @@
           location: loc
         });
         if (f.pass.value) s.password = f.pass.value;
+        s.deposit = dep; s.queue = qset;
         s.contact = { phone: normPhone(f.cphone.value), whatsapp: normPhone(f.cwa.value), chat: f.cchat.checked, call: f.ccall.checked, wa: f.cwab.checked };
       }, "حُفظت الإعدادات، وظهرت للعملاء");
     }

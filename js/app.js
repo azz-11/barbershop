@@ -62,6 +62,9 @@
     openSalon: null,    // صفحة صالون مفتوحة من المنصة
     chat: null,         // { salonId, bookingCode, draft, from }
     cart: { salonId: null, items: {}, note: "", booking: "" },
+    calOpen: null,      // رمز الحجز المفتوحة له خيارات التقويم
+    qjoin: null,        // { salonId, service, from } حجز الدور عن بُعد
+    qLeave: null,       // تأكيد الخروج من الدور
     auth: { phone: "", name: "", code: "", sent: false, sms: "", error: "" }
   };
 
@@ -123,12 +126,8 @@
   const fmtDate = (iso, opts) => parseISO(iso).toLocaleDateString(LOCALE, opts || { weekday: "long", day: "numeric", month: "long" });
   const initials = (name) => name.replace(/^(صالون|ستوديو)\s+/, "").replace(/^ال(?=\S{2})/, "").trim().charAt(0);
 
-  /* الوقت محجوز إذا تداخل مع حجز قائم لنفس المختص */
-  function isBusy(salonId, staffId, date, minute) {
-    const mine = loadBookings().some((b) => b.status !== "cancelled" && b.salonId === salonId && b.staffId === staffId && b.date === date &&
-      minute < toMin(b.time) + b.minutes && minute + SLOT_MIN > toMin(b.time));
-    return mine;
-  }
+  /* الوقت محجوز إذا تداخل مع حجز قائم أو دور جارٍ لنفس المختص (من store.js) */
+  const isBusy = (salonId, staffId, date, minute) => Store.staffBusy(salonId, staffId, date, minute, SLOT_MIN);
   function freeStaff(s, date, start, duration, staffId) {
     const pool = staffId && staffId !== "any" ? s.staff.filter((p) => p.id === staffId) : s.staff;
     return pool.find((p) => {
@@ -148,6 +147,86 @@
       out.push({ time: fromMin(m), free: !past && !!freeStaff(s, date, m, dur, state.staffId) });
     }
     return out;
+  }
+
+  /* ---------- نصوص الوقت ---------- */
+  const hoursText = (n) => (n === 1 ? "ساعة واحدة" : n === 2 ? "ساعتين" : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
+  const minText = (n) => (n === 1 ? "دقيقة" : n === 2 ? "دقيقتين" : n <= 10 ? `${n} دقائق` : `${n} دقيقة`);
+  const policyText = (h) => (h > 0 ? `إلغاء مجاني حتى ${hoursText(h)} قبل الموعد` : "إلغاء مجاني حتى وقت الموعد");
+  const startDate = (b) => { const d = parseISO(b.date); d.setHours(...b.time.split(":").map(Number), 0, 0); return d; };
+  /* "بعد ساعتين و10 دقائق" إذا كان الموعد اليوم */
+  function untilText(b) {
+    if (b.date !== isoDate(new Date())) return "";
+    const diff = startDate(b).getTime() - Date.now();
+    if (diff <= 0) return Date.now() < startDate(b).getTime() + b.minutes * 60000 ? "موعدك الآن" : "";
+    const mins = Math.ceil(diff / 60000), h = Math.floor(mins / 60), m = mins % 60;
+    const hT = h === 0 ? "" : h === 1 ? "ساعة" : h === 2 ? "ساعتين" : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
+    const mT = m === 0 ? "" : m === 1 ? "دقيقة" : m === 2 ? "دقيقتين" : m <= 10 ? `${m} دقائق` : `${m} دقيقة`;
+    return "بعد " + [hT, mT].filter(Boolean).join(" و");
+  }
+
+  /* ملف تقويم .ics (RFC 5545): توقيت الرياض، وتنبيه قبل الموعد بساعة */
+  const icsStamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const icsText = (t) => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  function icsFold(line) {
+    const enc = new TextEncoder(); const out = []; let cur = "", bytes = 0, limit = 75;
+    for (const ch of line) {
+      const n = enc.encode(ch).length;
+      if (bytes + n > limit) { out.push(cur); cur = " "; bytes = 1; limit = 75; }
+      cur += ch; bytes += n;
+    }
+    out.push(cur); return out.join("\r\n");
+  }
+  function eventInfo(b, s) {
+    const start = startDate(b), end = new Date(start.getTime() + Math.max(b.minutes, 15) * 60000);
+    const where = s.address || s.name;
+    const maps = s.location ? `https://www.google.com/maps/search/?api=1&query=${s.location.lat},${s.location.lng}` : "";
+    const details = [`رقم الحجز: ${b.code}`, `${s.type === "men" ? "الحلاق" : "المختصة"}: ${b.staffName}`, policyText(b.policy ? b.policy.cancelHours : Store.cancelHours(s)), maps].filter(Boolean).join("\n");
+    return { title: `${s.name} · ${b.serviceNames.join("، ")}`, start: icsStamp(start), end: icsStamp(end), where, details };
+  }
+  function icsFor(b, s) {
+    const e = eventInfo(b, s);
+    const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Enayati//Booking//AR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+      "BEGIN:VTIMEZONE", "TZID:Asia/Riyadh", "BEGIN:STANDARD", "DTSTART:19700101T000000", "TZOFFSETFROM:+0300", "TZOFFSETTO:+0300", "TZNAME:+03", "END:STANDARD", "END:VTIMEZONE",
+      "BEGIN:VEVENT", `UID:${b.code}@enayati`, `DTSTAMP:${now}`, `DTSTART;TZID=Asia/Riyadh:${e.start}`, `DTEND;TZID=Asia/Riyadh:${e.end}`,
+      `SUMMARY:${icsText(e.title)}`, `LOCATION:${icsText(e.where)}`, `DESCRIPTION:${icsText(e.details)}`,
+      ...(s.location ? [`GEO:${s.location.lat};${s.location.lng}`] : []),
+      "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsText("تذكير: موعدك في " + s.name + " بعد ساعة")}`, "TRIGGER:-PT1H", "END:VALARM",
+      "END:VEVENT", "END:VCALENDAR"];
+    return lines.map(icsFold).join("\r\n") + "\r\n";
+  }
+  function downloadIcs(code) {
+    const b = loadBookings().find((x) => x.code === code); if (!b) return;
+    const s = Store.salon(b.salonId);
+    const url = URL.createObjectURL(new Blob([icsFor(b, s)], { type: "text/calendar;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = `enayati-${b.code}.ics`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast("نُزّل ملف التقويم. افتحه لإضافة الموعد");
+  }
+  const gcalUrl = (b, s) => { const e = eventInfo(b, s);
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(e.title)}&dates=${e.start}/${e.end}&ctz=Asia/Riyadh&details=${encodeURIComponent(e.details)}&location=${encodeURIComponent(e.where)}`; };
+  const dirUrl = (s) => "https://www.google.com/maps/dir/?api=1&destination=" + (s.location ? `${s.location.lat},${s.location.lng}` : encodeURIComponent(`${s.name} ${s.address || ""}`.trim()));
+  const salonUrl = (s) => `${location.origin}${location.pathname}?s=${s.id}`;
+  const shareUrl = (b, s) => "https://wa.me/?text=" + encodeURIComponent(`موعدي في ${s.name}\n${fmtDate(b.date)} الساعة ${fmtTime(b.time)}\nرقم الحجز: ${b.code}\n${salonUrl(s)}`);
+
+  /* تفاصيل إضافية للموعد: السياسة، العربون، العدّاد، والأزرار الثلاثة */
+  function bookingExtras(b, s) {
+    const hours = b.policy ? b.policy.cancelHours : Store.cancelHours(s);
+    const until = untilText(b);
+    const dep = b.deposit;
+    return `${until ? `<p class="countdown">${I.cal}<span>${until}</span></p>` : ""}
+      ${dep ? `<div class="dep-lines"><span>العربون: <b class="num">${money(dep.amount)}</b> · ${esc(Store.DEPOSIT_STATES[dep.status] || "")}</span>
+        <span>المتبقي في الصالون: <b class="num">${money(Math.max(0, b.total - dep.amount))}</b></span></div>` : ""}
+      <p class="policy-line">${policyText(hours)}</p>
+      <div class="trio">
+        <button type="button" class="trio-btn" data-act="cal" data-v="${b.code}" aria-expanded="${state.calOpen === b.code}">${I.cal}<span>أضف للتقويم</span></button>
+        <a class="trio-btn" href="${esc(dirUrl(s))}" target="_blank" rel="noopener">${I.pin}<span>الاتجاهات</span></a>
+        <a class="trio-btn" href="${esc(shareUrl(b, s))}" target="_blank" rel="noopener">${I.wa}<span>شارك</span></a>
+      </div>
+      ${state.calOpen === b.code ? `<div class="cal-choices">
+        <button type="button" class="chip" data-act="ics" data-v="${b.code}">ملف التقويم (.ics)</button>
+        <a class="chip" href="${esc(gcalUrl(b, s))}" target="_blank" rel="noopener">Google Calendar</a></div>` : ""}`;
   }
 
   /* ---------- الهوية حسب الصالون ---------- */
@@ -368,6 +447,67 @@
     c.draft = ""; c.focus = true; render();
   }
 
+  /* ---------- الدور (بدون موعد) ---------- */
+  const queuePos = (q) => Store.queueWaiting(q.salonId).findIndex((x) => x.id === q.id) + 1;
+  function queueCard(s) {
+    if (!s.queue || !s.queue.enabled) return "";
+    const est = Store.queueEstimate(s);
+    const mine = sessionPhone() ? Store.queueOf(sessionPhone()).find((q) => q.salonId === s.id) : null;
+    const open = openStatus(s).open;
+    const full = est.waiting >= s.queue.max;
+    return `<div class="queue-card" aria-live="polite">
+      <div class="q-head"><b>الدور بدون موعد</b><span class="live-dot">مباشر</span></div>
+      <p class="q-line">المنتظرون الآن: <b class="num">${est.waiting}</b> · ${est.minutes ? `الانتظار المتوقع نحو <b class="num">${est.minutes}</b> ${est.minutes <= 10 ? "دقائق" : "دقيقة"}` : "لا انتظار تقريباً"}</p>
+      ${mine ? `<button type="button" class="q-mine" data-act="mine">دورك <b class="num" dir="ltr">${mine.number}</b> · ${mine.status === "serving" ? "حان دورك، تفضّل" : `ترتيبك <b class="num">${queuePos(mine)}</b>`}</button>`
+        : !open ? `<p class="hint">الدور متاح في ساعات العمل.</p>`
+        : !s.queue.remote ? `<p class="hint">احضر للصالون، وسجّل اسمك عند الاستقبال.</p>`
+        : full ? `<p class="hint">الدور ممتلئ حالياً. جرّب بعد قليل.</p>`
+        : `<button type="button" class="btn" data-act="queue-start" data-v="${s.id}">احجز دوري</button>`}
+    </div>`;
+  }
+  function viewQueueJoin() {
+    const s = Store.salon(state.qjoin.salonId);
+    const est = Store.queueEstimate(s);
+    return `<section class="screen">
+        ${topbar(true, "احجز دورك")}
+        ${salonHead(s)}
+        <div class="queue-card"><p class="q-line">المنتظرون الآن: <b class="num">${est.waiting}</b> · ${est.minutes ? `الانتظار المتوقع نحو <b class="num">${est.minutes}</b> ${est.minutes <= 10 ? "دقائق" : "دقيقة"}` : "لا انتظار تقريباً"}</p></div>
+        <div><h2 class="section-title">ماذا تريد؟</h2><p class="hint">لحساب وقت انتظار أدق. يمكنك تغييره في الصالون.</p></div>
+        <div class="options" role="radiogroup" aria-label="الخدمة">${s.services.map((sv) => `
+          <button type="button" role="radio" class="option with-check" data-act="queue-svc" data-v="${sv.id}" aria-checked="${state.qjoin.service === sv.id}">
+            <span class="check" style="border-radius:50%">${I.check}</span><span class="title">${esc(sv.name)}</span><span class="price num">${money(sv.price)}</span><span class="sub">${svcSub(sv)}</span>
+          </button>`).join("")}</div>
+        ${sessionPhone() ? `<div class="card form">
+            <div class="verified-row"><span class="num" dir="ltr">${esc(sessionPhone())}</span><span class="ok-tag">رقم مؤكَّد ✓</span></div>
+            <label for="qj-name">الاسم</label><input id="qj-name" data-cust="name" autocomplete="name" value="${esc(state.cust.name || loadProfile().name || "")}">
+          </div>
+          <button type="button" class="btn wide" data-act="queue-join">تأكيد حجز الدور</button>
+          <p class="hint">إذا لم تحضر عند وصول دورك، يُحسب غياباً عند الصالون.</p>`
+          : authBlock("أكّد رقم جوالك لحجز دورك", true)}
+      </section>${tabbar("home")}`;
+  }
+  function queueMineHtml() {
+    if (!sessionPhone()) return "";
+    const list = Store.queueOf(sessionPhone()).filter((q) => !SALON || q.salonId === SALON.id);
+    if (!list.length) return "";
+    return `<div class="block"><h2 class="section-title">دوري الآن</h2>${list.map((q) => {
+      const s = Store.salon(q.salonId);
+      const pos = queuePos(q);
+      const est = Store.queueEstimate(s, q.seq).minutes;
+      return `<article class="booking queue-mine">
+        <div class="booking-head"><div><h3>${esc(s.name)}</h3><p class="hint">${q.serviceNames.length ? q.serviceNames.map(esc).join("، ") : "بدون موعد"}</p></div>
+          <span class="q-number num" dir="ltr">${q.number}</span></div>
+        ${q.status === "serving" ? `<p class="q-now">حان دورك، تفضّل${q.staffName ? ` مع ${esc(q.staffName)}` : ""}</p>`
+          : `<p class="q-line">ترتيبك: <b class="num">${pos}</b> · ${pos === 1 ? "أنت التالي" : est ? `الانتظار المتوقع نحو <b class="num">${est}</b> ${est <= 10 ? "دقائق" : "دقيقة"}` : "قريباً"}</p>`}
+        ${q.notice ? `<div class="sms-sim" role="note"><div class="sms-head"><span>رسالة نصية · ${esc(s.name)}</span><span class="sms-tag">محاكاة: تصل لجوالك</span></div><p>${esc(q.notice)}</p></div>` : ""}
+        ${q.status === "waiting" ? (state.qLeave === q.id
+          ? `<div class="confirm-box"><p>هل تريد الخروج من الدور؟ سيفقد رقمك مكانه.</p><div class="booking-actions">
+              <button type="button" class="btn danger" data-act="queue-leave" data-v="${q.id}">نعم، اخرج</button><button type="button" class="btn ghost" data-act="queue-leave-no">تراجع</button></div></div>`
+          : `<div class="booking-actions"><a class="btn ghost" href="${esc(dirUrl(s))}" target="_blank" rel="noopener">${I.pin} الاتجاهات</a><button type="button" class="btn ghost" data-act="queue-leave-ask" data-v="${q.id}">الخروج من الدور</button></div>`) : ""}
+      </article>`;
+    }).join("")}</div>`;
+  }
+
   function viewSalonHome(s, inPlatform) {
     const st = openStatus(s);
     const p = loadProfile();
@@ -396,6 +536,7 @@
             ? `<button type="button" class="btn hero-btn" data-act="salon" data-v="${s.id}">احجز موعدك</button>`
             : `<p class="hero-note">${Store.isLive(s) ? "يجهّز الصالون قائمة خدماته، والحجز متاح قريباً." : "الحجز عبر التطبيق متوقف مؤقتاً. تواصل مع الصالون مباشرة."}</p>`}
         </div>
+        ${queueCard(s)}
         ${contactRow(s)}
         ${nextVisitCard()}
 
@@ -523,17 +664,24 @@
 
   function staffLabel(s, id) { return id === "any" ? "أي مختص متاح" : s.staff.find((p) => p.id === id).name; }
 
+  const depositNow = (s) => Store.depositFor(s, { phone: sessionPhone(), date: state.date, time: state.time, total: totalPrice() });
   function stepPay(s) {
+    const dep = depositNow(s);
+    if (dep.required && state.payment === "cash") state.payment = null;
+    const methods = DATA.payments.filter((p) => !dep.required || p.id !== "cash");
     return `<div><h2 class="section-title">المراجعة والدفع</h2></div>
       <div class="summary">
         <div class="row"><span>الخدمات</span><span>${chosenServices().map((x) => esc(x.name)).join("، ")}</span></div>
         <div class="row"><span>${s.type === "men" ? "الحلاق" : "المختصة"}</span><span>${esc(staffLabel(s, state.staffId))}</span></div>
         <div class="row"><span>الموعد</span><span>${fmtDate(state.date)}<br><span class="num">${fmtTime(state.time)}</span></span></div>
         <div class="row"><span>المدة</span><span class="num">${fmtDuration(totalMin())}</span></div>
+        <div class="row"><span>الإلغاء</span><span>${policyText(Store.cancelHours(s))}</span></div>
         <div class="row total"><span>الإجمالي</span><span class="num">${money(totalPrice())}</span></div>
       </div>
-      <div><h3 class="section-title" style="font-size:var(--fs-md)">طريقة الدفع</h3></div>
-      <div class="options" role="radiogroup" aria-label="طريقة الدفع">${DATA.payments.map((p) => `
+      ${dep.required ? `<div class="deposit-note"><b>يتطلب هذا الحجز عربون <span class="num">${money(dep.amount)}</span> يُخصم من الفاتورة</b>
+        <span>${esc(dep.reason)}. ويُدفع الباقي <span class="num">${money(totalPrice() - dep.amount)}</span> في الصالون.</span></div>` : ""}
+      <div><h3 class="section-title" style="font-size:var(--fs-md)">${dep.required ? "طريقة دفع العربون" : "طريقة الدفع"}</h3></div>
+      <div class="options" role="radiogroup" aria-label="طريقة الدفع">${methods.map((p) => `
         <button type="button" role="radio" class="option with-check" data-act="pay" data-v="${p.id}" aria-checked="${state.payment === p.id}">
           <span class="check" style="border-radius:50%">${I.check}</span>
           <span class="title">${esc(p.name)}</span><span></span>
@@ -614,8 +762,9 @@
   function viewBook() {
     const s = salon();
     const body = [stepServices, stepStaff, stepTime, stepPay][state.step](s);
+    const dep = state.step === 3 ? depositNow(s) : { required: false };
     const label = state.paying ? "جاري الدفع…" : state.step < 3 ? "التالي"
-      : state.payment === "cash" ? "تأكيد الحجز" : `ادفع ${money(totalPrice())}`;
+      : dep.required ? `ادفع العربون ${money(dep.amount)}` : state.payment === "cash" ? "تأكيد الحجز" : `ادفع ${money(totalPrice())}`;
     return `<section class="screen">
         ${topbar(true)}
         ${salonHead(s)}
@@ -645,8 +794,11 @@
             <div class="row"><span>الموعد</span><span>${fmtDate(b.date)}<br><span class="num">${fmtTime(b.time)}</span></span></div>
             <div class="row"><span>الخدمات</span><span>${b.serviceNames.map(esc).join("، ")}</span></div>
             <div class="row"><span>${s.type === "men" ? "الحلاق" : "المختصة"}</span><span>${esc(b.staffName)}</span></div>
-            <div class="row total"><span>${b.payment === "cash" ? "يُدفع في الصالون" : "المدفوع"}</span><span class="num">${money(b.total)}</span></div>
+            ${b.deposit ? `<div class="row"><span>العربون المدفوع</span><span class="num">${money(b.deposit.amount)}</span></div>
+              <div class="row total"><span>المتبقي في الصالون</span><span class="num">${money(b.total - b.deposit.amount)}</span></div>`
+              : `<div class="row total"><span>${b.payment === "cash" ? "يُدفع في الصالون" : "المدفوع"}</span><span class="num">${money(b.total)}</span></div>`}
           </div>
+          <div class="ticket-extras">${bookingExtras({ ...b, deposit: null }, s)}</div>
         </div>
         <p class="hint" style="text-align:center">احضر قبل موعدك بـ ١٠ دقائق. يمكنك الإلغاء من "مواعيدي".</p>
       </section>
@@ -683,6 +835,17 @@
     </div>`;
   }
 
+  /* نص تأكيد الإلغاء حسب المهلة والعربون */
+  function cancelPrompt(b) {
+    const hours = b.policy ? b.policy.cancelHours : Store.cancelHours(Store.salon(b.salonId));
+    const dep = b.deposit && b.deposit.status === "paid" ? b.deposit.amount : 0;
+    if (Store.isLateCancel(b)) {
+      return dep ? `فات وقت الإلغاء المجاني (${hoursText(hours)} قبل الموعد)، وسيحتفظ الصالون بالعربون <b class="num">${money(dep)}</b>. هل تريد الإلغاء؟`
+        : `فات وقت الإلغاء المجاني (${hoursText(hours)} قبل الموعد)، وسيُسجَّل الإلغاء متأخراً. هل تريد الإلغاء؟`;
+    }
+    return dep ? `الإلغاء مجاني الآن، ويُعاد لك العربون <b class="num">${money(dep)}</b>. هل تريد إلغاء هذا الموعد؟` : "هل تريد إلغاء هذا الموعد؟";
+  }
+
   function viewMine() {
     const list = myBookings().slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     const items = list.map((b) => {
@@ -697,8 +860,10 @@
         <div class="booking-when">${I.cal}<span>${fmtDate(b.date)} · <span class="num">${fmtTime(b.time)}</span></span></div>
         <div class="meta"><span>رقم الحجز <b class="num" style="direction:ltr;display:inline-block">${b.code}</b></span><span class="num">${money(b.total)}</span></div>
         ${b.status === "completed" ? rateBox(b, s) : ""}
+        ${cls === "upcoming" ? bookingExtras(b, s) : ""}
+        ${b.status === "cancelled" && b.deposit ? `<p class="policy-line">العربون: ${esc(Store.DEPOSIT_STATES[b.deposit.status] || "")}</p>` : ""}
         ${cls === "upcoming" ? (asking
-          ? `<div class="confirm-box"><p>هل تريد إلغاء هذا الموعد؟</p><div class="booking-actions">
+          ? `<div class="confirm-box"><p>${cancelPrompt(b)}</p><div class="booking-actions">
                <button type="button" class="btn danger" data-act="cancel-yes" data-v="${b.code}">نعم، ألغِ الموعد</button>
                <button type="button" class="btn ghost" data-act="cancel-no">تراجع</button></div></div>`
           : `<div class="booking-actions"><button type="button" class="btn ghost" data-act="cancel-ask" data-v="${b.code}">إلغاء الموعد</button>
@@ -710,6 +875,7 @@
     return `<section class="screen">
         ${topbar()}
         <div class="hello"><h1>مواعيدي</h1></div>
+        ${queueMineHtml()}
         ${chatsHtml()}
         ${ordersHtml()}
         ${list.length ? `<div class="bookings">${items}</div>`
@@ -892,10 +1058,10 @@
 
   /* ---------- العرض ---------- */
   function render() {
-    const brandOf = { book: () => salon(), done: () => salon(), salon: () => Store.salon(state.openSalon), chat: () => state.chat && Store.salon(state.chat.salonId), cart: () => Store.salon(state.cart.salonId) };
+    const brandOf = { book: () => salon(), done: () => salon(), salon: () => Store.salon(state.openSalon), chat: () => state.chat && Store.salon(state.chat.salonId), cart: () => Store.salon(state.cart.salonId), queue: () => state.qjoin && Store.salon(state.qjoin.salonId) };
     applyBrand(SALON || (brandOf[state.view] ? brandOf[state.view]() : null));
     $app.innerHTML = { splash: viewSplash, home: viewHome, book: viewBook, done: viewDone, mine: viewMine, profile: viewProfile,
-      salon: () => viewSalonHome(Store.salon(state.openSalon), true), chat: viewChat, cart: viewCart }[state.view]();
+      salon: () => viewSalonHome(Store.salon(state.openSalon), true), chat: viewChat, cart: viewCart, queue: viewQueueJoin }[state.view]();
     if (state.view === "chat") {
       const box = document.getElementById("messages"); if (box) box.scrollTop = box.scrollHeight;
       window.scrollTo(0, document.body.scrollHeight);
@@ -906,7 +1072,7 @@
   }
   function go(view) {
     if (view !== state.view) state.prev = state.view;
-    state.view = view; state.cancelAsk = null; state.editProfile = false; state.clearAsk = false;
+    state.view = view; state.cancelAsk = null; state.editProfile = false; state.clearAsk = false; state.calOpen = null; state.qLeave = null;
     render(); window.scrollTo(0, 0);
   }
 
@@ -928,22 +1094,29 @@
     const start = toMin(state.time);
     const person = freeStaff(s, state.date, start, Math.max(totalMin(), SLOT_MIN), state.staffId);
     if (!person) { toast("هذا الوقت لم يعد متاحاً، اختر وقتاً آخر"); state.step = 2; state.time = null; render(); return; }
+    const dep = depositNow(s);
+    if (dep.required && (!state.payment || state.payment === "cash")) { toast("اختر طريقة دفع العربون"); return; }
     state.paying = true; render();
-    setTimeout(() => {
+    const charge = dep.required ? Payments.chargeDeposit({ amount: dep.amount, method: state.payment }) : new Promise((r) => setTimeout(() => r(null), 600));
+    charge.then((paid) => {
+      if (dep.required && (!paid || !paid.ok)) { state.paying = false; render(); toast("لم يتم دفع العربون. حاول مرة أخرى."); return; }
       const b = {
         code: makeCode(), salonId: s.id, staffId: person.id, staffName: person.name,
         services: state.services.slice(), serviceNames: chosenServices().map((x) => x.name),
         date: state.date, time: state.time, minutes: totalMin(), total: totalPrice(),
         payment: state.payment, status: "confirmed", createdAt: new Date().toISOString(),
-        customer: { name: state.cust.name.trim(), phone: sessionPhone() }
+        customer: { name: state.cust.name.trim(), phone: sessionPhone() },
+        policy: { cancelHours: Store.cancelHours(s) },
+        deposit: paid ? { amount: dep.amount, status: "paid", ref: paid.ref, method: paid.method, reason: dep.reason, at: paid.at } : null
       };
+      if (paid) b.payment = "cash"; /* العربون مدفوع، والباقي في الصالون */
       Store.addBooking(b);
       Store.upsertCustomer({ phone: b.customer.phone, name: b.customer.name, via: "app", salonId: s.id });
       const p = loadProfile();
       if (!p.name) saveProfile({ ...p, name: b.customer.name });
       state.paying = false; state.lastBooking = b;
       go("done");
-    }, 900);
+    });
   }
 
   let toastTimer;
@@ -1025,6 +1198,7 @@
         if (state.view === "salon") { go("home"); break; }
         if (state.view === "chat") { go(state.chat.from && state.chat.from !== "chat" ? state.chat.from : "home"); break; }
         if (state.view === "cart") { go(SALON ? "home" : "salon"); break; }
+        if (state.view === "queue") { go(state.qjoin && state.qjoin.from === "salon" ? "salon" : "home"); break; }
         if (state.step > 0) { state.step--; render(); window.scrollTo(0, 0); } else go(state.bookFrom === "salon" ? "salon" : "home");
         break;
       case "service": {
@@ -1042,9 +1216,32 @@
         break;
       case "cancel-ask": state.cancelAsk = v; render(); break;
       case "cancel-no": state.cancelAsk = null; render(); break;
-      case "cancel-yes":
-        saveBookings(loadBookings().map((b) => (b.code === v ? { ...b, status: "cancelled" } : b)));
-        state.cancelAsk = null; render(); toast("تم إلغاء الموعد"); break;
+      case "cancel-yes": {
+        const bk = loadBookings().find((x) => x.code === v);
+        const r = Store.cancelBooking(v, "customer");
+        if (r.refunded && bk && bk.deposit) Payments.refundDeposit({ ref: bk.deposit.ref, amount: r.refunded });
+        state.cancelAsk = null; render();
+        toast(r.forfeited ? `أُلغي الموعد، واحتفظ الصالون بالعربون ${money(r.forfeited)}` : r.refunded ? `أُلغي الموعد، وأُعيد لك العربون ${money(r.refunded)}` : r.late ? "أُلغي الموعد (إلغاء متأخر)" : "تم إلغاء الموعد");
+        break;
+      }
+      case "cal": state.calOpen = state.calOpen === v ? null : v; render(); break;
+      case "ics": downloadIcs(v); break;
+      case "queue-start": state.qjoin = { salonId: v, service: null, from: state.view }; go("queue"); break;
+      case "queue-svc": state.qjoin.service = v; render(); break;
+      case "queue-join": {
+        const qs = Store.salon(state.qjoin.salonId);
+        const name = (state.cust.name || loadProfile().name || "").trim();
+        if (name.length < 2) { toast("اكتب اسمك"); document.getElementById("qj-name")?.focus(); break; }
+        const r = Store.joinQueue(qs.id, { name, phone: sessionPhone(), remote: true, serviceIds: state.qjoin.service ? [state.qjoin.service] : [] });
+        const msg = { full: "الدور ممتلئ حالياً. جرّب بعد قليل.", closed: "الصالون مغلق الآن. الدور متاح في ساعات العمل.", exists: "لديك دور قائم في هذا الصالون.", disabled: "الصالون لا يستقبل بالدور حالياً.", "remote-off": "حجز الدور عن بُعد غير متاح في هذا الصالون." }[r.error];
+        if (msg) { toast(msg); break; }
+        const p = loadProfile(); if (!p.name) saveProfile({ ...p, name });
+        Store.upsertCustomer({ phone: sessionPhone(), name, via: "app", salonId: qs.id });
+        toast(`دورك ${r.entry.number}. سنرسل لك رسالة عندما يقترب دورك.`); state.qjoin = null; go("mine"); break;
+      }
+      case "queue-leave-ask": state.qLeave = v; render(); break;
+      case "queue-leave-no": state.qLeave = null; render(); break;
+      case "queue-leave": Store.queueAction(v, "leave"); state.qLeave = null; render(); toast("خرجت من الدور"); break;
     }
   });
 
@@ -1117,6 +1314,13 @@
     if (state.view === "chat" && state.chat) { const i = document.getElementById("chat-input"); state.chat.focus = !!(i && document.activeElement === i); }
     if (state.view !== "splash" && state.view !== "book" && state.view !== "cart") render();
   });
+  /* تحديث العدّاد وترتيب الدور كل 30 ثانية (دون مقاطعة الكتابة) */
+  setInterval(() => {
+    if (document.hidden) return;
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    if (["done", "mine", "salon"].includes(state.view) || (state.view === "home" && SALON)) render();
+  }, 30000);
   state.here = getItem(HERE_KEY, null);
   state.filter = loadProfile().pref || "all";
   state.view = "splash";
