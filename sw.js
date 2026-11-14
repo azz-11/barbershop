@@ -1,12 +1,13 @@
 /* عناياتي — عامل الخدمة: يحفظ ملفات التطبيق ليفتح بسرعة وبدون إنترنت.
    عند تعديل أي ملف، ارفع رقم VERSION ليحصل المستخدمون على النسخة الجديدة. */
-const VERSION = "enayati-v13";
+const VERSION = "enayati-v14";
 const SHELL = [
   "./",
   "./index.html",
   "./css/styles.css",
   "./fonts/thmanyah.css",
   "./js/data.js",
+  "./js/data-demo.js",
   "./js/store.js",
   "./js/payments.js",
   "./js/app.js",

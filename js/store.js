@@ -63,9 +63,9 @@ window.Store = (function () {
     asrar: { plan: "trial", left: 14 }
   };
 
-  function makeSub(id, createdAt, billing) {
+  function makeSub(id, createdAt, billing, demoSub) {
     const now = new Date().toISOString();
-    const demo = DEMO_SUBS[id];
+    const demo = DEMO_SUBS[id] || demoSub;
     if (!demo) return { plan: "trial", startedAt: createdAt || now, endsAt: addDays(createdAt || now, billing.trialDays), payments: [], requests: [] };
     const endsAt = addDays(now, demo.left);
     const period = demo.plan === "yearly" ? 365 : 30;
@@ -107,6 +107,13 @@ window.Store = (function () {
     d.customers = d.customers || [];
     /* ترقية: الموقع والأرقام التجريبية من البيانات الأولية، وإزالة النجوم القديمة */
     const base = window.ENAYATI_DATA.salons;
+    /* ترقية: إضافة الصوالين التجريبية الجديدة مرة واحدة (لا تعود إن حذفتها الإدارة) */
+    d.demoAdded = d.demoAdded || [];
+    base.forEach((src) => {
+      if (!src.demo || d.demoAdded.includes(src.id)) return;
+      d.demoAdded.push(src.id);
+      if (!d.salons.some((s) => s.id === src.id)) d.salons.push(seedSalon(src));
+    });
     d.salons.forEach((s) => {
       if (!s.contact) s.contact = { phone: "", whatsapp: "", call: true, wa: true, chat: true };
       const src = base.find((x) => x.id === s.id);
@@ -133,24 +140,27 @@ window.Store = (function () {
     d.threads = d.threads || {};
     d.orders = d.orders || [];
     d.salons.forEach((s) => {
-      if (!s.subscription) s.subscription = makeSub(s.id, s.createdAt, d.billing);
+      if (!s.subscription) s.subscription = makeSub(s.id, s.createdAt, d.billing, s.demoSub);
       s.subscription.payments = s.subscription.payments || [];
       s.subscription.requests = s.subscription.requests || [];
     });
     return d;
   }
 
-  function seed() {
-    const now = new Date().toISOString();
-    const salons = clone(window.ENAYATI_DATA.salons).map((s) => ({
+  function seedSalon(src) {
+    return {
       status: "active",        // active | suspended (إيقاف يدوي من الإدارة)
       unlisted: false,
       assets: true,            // لها أيقونة وملف تثبيت جاهز
       password: "1234",        // تجريبي فقط
       closedDays: [],          // أرقام أيام الأسبوع المغلقة: 0 الأحد … 6 السبت
-      createdAt: now,
-      ...s
-    }));
+      createdAt: new Date().toISOString(),
+      ...clone(src)
+    };
+  }
+
+  function seed() {
+    const salons = window.ENAYATI_DATA.salons.map(seedSalon);
     let bookings = [];
     try { bookings = JSON.parse(localStorage.getItem(OLD_BOOKINGS_KEY)) || []; } catch (e) { /* لا شيء */ }
     return normalize({ version: 1, salons, bookings });
@@ -163,7 +173,7 @@ window.Store = (function () {
       if (raw && raw === cacheRaw) return cacheData;
       const d = JSON.parse(raw);
       if (d && d.version === 1) {
-        const needs = !d.billing || !d.customers || !d.threads || !d.orders || !d.queue || !d.reliability
+        const needs = window.ENAYATI_DATA.salons.some((x) => x.demo && !(d.demoAdded || []).includes(x.id)) || !d.billing || !d.customers || !d.threads || !d.orders || !d.queue || !d.reliability
           || d.salons.some((s) => !s.subscription || "rating" in s || !s.contact || !s.deposit || !s.queue || !s.deposit.rules
             || (OLD_DEMO_COORDS[s.id] && s.location && Math.abs(s.location.lat - OLD_DEMO_COORDS[s.id][0]) < 1e-4));
         normalize(d);
@@ -184,7 +194,7 @@ window.Store = (function () {
   /* حالة اشتراك الصالون كما تُعرض وتُطبّق */
   function subState(s, now) {
     const d = read();
-    const sub = s.subscription || makeSub(s.id, s.createdAt, d.billing);
+    const sub = s.subscription || makeSub(s.id, s.createdAt, d.billing, s.demoSub);
     const days = Math.ceil((new Date(sub.endsAt).getTime() - (now || Date.now())) / DAY);
     const base = { days, plan: sub.plan, planName: PLAN_NAMES[sub.plan], endsAt: sub.endsAt, pending: sub.requests.length > 0 };
     if (s.status === "suspended") return { ...base, code: "suspended", label: "موقوف من الإدارة", live: false };
@@ -288,7 +298,7 @@ window.Store = (function () {
     salon: (id) => read().salons.find((s) => s.id === id) || null,
     saveSalon(salon) {
       mutate((d) => {
-        if (!salon.subscription) salon.subscription = makeSub(salon.id, salon.createdAt, d.billing);
+        if (!salon.subscription) salon.subscription = makeSub(salon.id, salon.createdAt, d.billing, salon.demoSub);
         salon.deposit = withDefaults(DEFAULT_DEPOSIT, salon.deposit);
         salon.queue = withDefaults(DEFAULT_QUEUE, salon.queue);
         const i = d.salons.findIndex((s) => s.id === salon.id);
