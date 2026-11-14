@@ -508,3 +508,11 @@ p { margin: 0; }
 .day.is-current { border-style: dashed; border-color: var(--brand); }
 .rs-slot { display: grid; place-items: center; gap: 0; line-height: 1.2; padding-block: 6px; }
 .rs-slot small { font-size: 10px; font-weight: 400; opacity: .8; }
+
+/* البحث في الصوالين */
+.search { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 0 14px; min-height: 48px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; color: var(--muted); }
+.search:focus-within { border-color: var(--brand); }
+.search input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--ink); font: inherit; min-height: 44px; }
+.search input:focus { outline: none; }
+.search-count { margin: 8px 4px 10px; font-size: var(--fs-xs); min-height: 1em; }
+.salons .salon[hidden], .search-empty[hidden] { display: none; }

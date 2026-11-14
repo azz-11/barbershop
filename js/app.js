@@ -31,6 +31,7 @@
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1-4.5A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>',
     bag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>',
     pin: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    search: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
     smile: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
     fVery: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M7.5 13.5c1 2 2.6 3 4.5 3s3.5-1 4.5-3z" fill="currentColor"/><path d="M8.5 9.5h.01M15.5 9.5h.01"/></svg>',
     fOk: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1 2.1 1.5 3.5 1.5s2.6-.5 3.5-1.5M9 9.5h.01M15 9.5h.01"/></svg>',
@@ -246,8 +247,9 @@
     if (state.sortNear && state.here) list = list.slice().sort((a, b) => (distOf(a) ?? 1e9) - (distOf(b) ?? 1e9));
     const seg = [["all", "الكل"], ["men", "رجالي"], ["women", "نسائي"]]
       .map(([k, l]) => `<button type="button" data-act="filter" data-v="${k}" aria-pressed="${state.filter === k}">${l}</button>`).join("");
-    const cards = list.map((s) => `
-      <button type="button" class="salon" data-act="open-salon" data-v="${s.id}" style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}">
+    const q = normAr(state.q || "");
+    const cards = list.map((s) => { const hay = salonHay(s); return `
+      <button type="button" class="salon" data-act="open-salon" data-v="${s.id}" data-q="${esc(hay)}"${q && !hay.includes(q) ? " hidden" : ""} style="--salon-color:${s.brand.primary};--salon-accent:${s.brand.accent}">
         <span class="monogram" aria-hidden="true">${esc(initials(s.name))}</span>
         <span class="salon-info">
           <h3>${esc(s.name)}</h3>
@@ -259,7 +261,8 @@
           </span>
         </span>
         <span class="tag">${s.type === "men" ? "رجالي" : "نسائي"}</span>
-      </button>`).join("");
+      </button>`; }).join("");
+    const shown = list.filter((s) => !q || salonHay(s).includes(q)).length;
     const p = loadProfile();
     const h = new Date().getHours();
     const greet = h < 12 ? "صباح الخير" : "مساء الخير";
@@ -273,9 +276,25 @@
           <div class="block-head"><h2 class="section-title">الصوالين</h2>
             <button type="button" class="near-btn" data-act="near" aria-pressed="${!!(state.sortNear && state.here)}">${I.pin} ${state.locating ? "جاري تحديد موقعك…" : "الأقرب إليّ"}</button></div>
           <div class="segments" role="group" aria-label="نوع الصالون">${seg}</div>
+          <label class="search">${I.search}<input type="search" data-search enterkeyhint="search" placeholder="ابحث باسم الصالون أو الحي أو الخدمة" aria-label="بحث في الصوالين" value="${esc(state.q || "")}"></label>
+          <p class="hint search-count" aria-live="polite">${countText(shown)}</p>
           <div class="salons">${cards}</div>
+          <div class="empty search-empty"${shown ? " hidden" : ""}><p>لا توجد صوالين مطابقة لبحثك.</p></div>
         </div>
       </section>${tabbar("home")}`;
+  }
+
+  /* ---------- البحث في الصوالين ---------- */
+  const normAr = (x) => String(x).toLowerCase().replace(/[\u064B-\u0652\u0640ء]/g, "").replace(/ئ/g, "ي").replace(/ؤ/g, "و")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ").trim();
+  const salonHay = (s) => normAr([s.name, s.tagline, s.area, ...s.services.map((v) => v.name)].join(" "));
+  const countText = (n) => (n === 0 ? "" : n === 1 ? "صالون واحد" : n === 2 ? "صالونان" : n <= 10 ? `${n} صوالين` : `${n} صالوناً`);
+  function applySearch() {
+    const q = normAr(state.q || "");
+    let n = 0;
+    $app.querySelectorAll(".salons .salon").forEach((el) => { const ok = !q || el.dataset.q.includes(q); el.hidden = !ok; if (ok) n += 1; });
+    const c = $app.querySelector(".search-count"); if (c) c.textContent = countText(n);
+    const e = $app.querySelector(".search-empty"); if (e) e.hidden = n > 0;
   }
 
   function servicesHtml(s, item, label) {
@@ -1330,6 +1349,7 @@
 
   /* بيانات العميل في خطوة الدفع */
   $app.addEventListener("input", (e) => {
+    if (e.target.dataset && "search" in e.target.dataset) { state.q = e.target.value; applySearch(); return; }
     if (e.target.dataset && e.target.dataset.chat && state.chat) { state.chat.draft = e.target.value; return; }
     if (e.target.dataset && e.target.dataset.cart) { state.cart[e.target.dataset.cart] = e.target.value; return; }
     if (e.target.dataset && e.target.dataset.rateNote) {
